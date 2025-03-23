@@ -33,6 +33,14 @@ android {
     kotlinOptions {
         jvmTarget = "21"
     }
+    buildTypes {
+        release {
+            buildConfigField("boolean", "RELEASE", "true")
+        }
+        debug {
+            buildConfigField("boolean", "RELEASE", "false")
+        }
+    }
 }
 
 dependencies {
