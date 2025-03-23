@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "gRPC.v1";
+option java_outer_classname = "UserConnectionProto";
+
+service UserConnection{
+  rpc LoadUsersList(stream UserConnectionRequest) returns (stream UserConnectionResponse);
+  rpc UserDisconnect(DisconnectRequest) returns (DisconnectResponse);
+}
+
+// В моём понимании запрос на отключение не несет в себе какие-либо переменные,
+// поэтому просто дал текста, если не прав, то пинайте
+message DisconnectResponse{
+  optional string text = 1;
+}
+
+message DisconnectRequest{
+  string name = 1;
+}
+
+enum UserConnectionErrorCode{
+  // Пустая строка имени
+  INVALID_USERNAME = 0;
+  // Истекло время ответа пакетов
+  NOT_ALIVE = 1;
+}
+
+message UserConnectionExceptionResponse{
+  // Когда появилась ошибка
+  google.protobuf.Timestamp timestamp = 1;
+  // Тип ошибки
+  UserConnectionErrorCode error = 2;
+}
+
+message UserConnectionRequest{
+  oneof user_connection_request_type{
+    // Это сообщение должно быть отправлено при первом запросе
+    InitialUserConnectionRequest initial_request = 1;
+
+    // Отправка пакета жизни, чтобы подтвердить активность соединения
+    // Пакет отправляется раз в промежуток указанный в InitialUserConnectionResponse
+    AlivePacket still_alive = 2;
+  }
+}
+
+message InitialUserConnectionRequest{
+  // Имя пользователя, которое он сам выбрал
+  string name = 1;
+}
+
+// Пакет жизни, который надо отправлять, чтобы подтверждать соединение
+message AlivePacket{
+  string kiss_of_the_poseidon = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  // Метка когда создался пакет
+}
+
+message UserConnectionResponse{
+  oneof user_activity_response_type{
+    // Это сообщение должно быть отправлено при первом подключении
+    InitialUserConnectionResponse initial_response = 1;
+    // Содержит список активных пользователей. Пользователь должен запросить список,
+    // чтобы получить такой тип ответа
+    UsersList users_list = 2;
+  }
+}
+
+// Первичный ответ от сервера
+message InitialUserConnectionResponse{
+  // Интервал, который показывает как часто пользователь должен отправлять данные на сервер
+  // чтобы подтверждать жизнедеятельность
+  google.protobuf.Duration user_keep_alive_interval = 1;
+}
+
+// Содержит список пользователей подключенных к серверу. Список должен обновлятся каждый раз
+// когда подключается новый пользователь.
+message UsersList{
+  repeated User users = 1;
+}
+
+// Содержит информацию о пользователе - имя, IP, порт
+message User{
+  // Имя пользователя должно быть отлично от пустой строки
+  string name = 1;
+
+  // IP- адрес пользователя, при этом может быть как IPv4, так и IPv6
+  string IP_address = 2;
+
+  // Номер порта пользователя
+  int32 port = 3;
+}
