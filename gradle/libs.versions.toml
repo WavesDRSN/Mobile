@@ -38,4 +38,3 @@ protobuf-kotlin-lite = {module = "com.google.protobuf:protobuf-kotlin-lite", ver
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 protobuf = { id = "com.google.protobuf", version = "0.9.4" }
-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "1.8.0" }
