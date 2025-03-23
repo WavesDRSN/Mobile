@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.protobuf)
 }
 
+kotlin {
+    jvmToolchain(21)
+}
+
 android {
     namespace = "ru.drsn.waves"
     compileSdk = 35
