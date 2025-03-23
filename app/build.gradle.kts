@@ -33,6 +33,9 @@ android {
     kotlinOptions {
         jvmTarget = "21"
     }
+    buildFeatures {
+        buildConfig = true
+    }
     buildTypes {
         release {
             buildConfigField("boolean", "RELEASE", "true")
