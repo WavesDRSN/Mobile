@@ -6,7 +6,6 @@ import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -17,13 +16,19 @@ import timber.log.Timber
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SignalingConnection(
-    private val serverAddress: String,
-    private val serverPort: Int,
+    serverAddress: String,
+    serverPort: Int,
     private val username: String
 ) {
     private val channel: ManagedChannel = ManagedChannelBuilder
         .forAddress(serverAddress, serverPort)
-        .usePlaintext() // Отключает TLS, можно заменить на `useTransportSecurity()`
+        .apply {
+            if (!BuildConfig.RELEASE) {
+                usePlaintext()
+            } else {
+                useTransportSecurity()
+            }
+        }
         .build()
 
     private val stub: UserConnectionGrpcKt.UserConnectionCoroutineStub =
@@ -51,7 +56,7 @@ class SignalingConnection(
                         delay(interval)
                         send(UserConnectionRequest.newBuilder()
                             .setStillAlive(AlivePacket.newBuilder()
-                                .setKissOfThePoseidon("some_value")
+                                .setKissOfThePoseidon("kiss me")
                                 .setTimestamp(Timestamp.getDefaultInstance())
                                 .build()
                             )
