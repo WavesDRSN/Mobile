@@ -37,6 +37,7 @@ class SignalingConnection(
     fun connect() {
         coroutineScope.launch {
             val requestFlow = channelFlow {
+                // Отправляем InitialUserConnectionRequest
                 send(UserConnectionRequest.newBuilder()
                     .setInitialRequest(
                         InitialUserConnectionRequest.newBuilder().setName(username).build()
@@ -44,6 +45,7 @@ class SignalingConnection(
                     .build()
                 )
 
+                // Ждём установки интервала KeepAlive
                 keepAliveIntervalFlow.collect { interval ->
                     while (isConnected.get()) {
                         delay(interval)
@@ -77,4 +79,12 @@ class SignalingConnection(
         }
     }
 
+    fun disconnect() {
+        coroutineScope.launch {
+            stub.userDisconnect(DisconnectRequest.newBuilder().setName(username).build())
+            isConnected.set(false)
+            channel.shutdown()
+            Timber.i("Disconnected from signaling server")
+        }
+    }
 }
