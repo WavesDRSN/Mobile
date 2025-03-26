@@ -36,6 +36,8 @@ class SignalingConnection(
     private val stub: UserConnectionGrpcKt.UserConnectionCoroutineStub =
         UserConnectionGrpcKt.UserConnectionCoroutineStub(channel)
 
+    private var usersList: List<User> = ArrayList<User>();
+
     private val isConnected = AtomicBoolean(false)
 
     private var keepAliveJob: Job? = null
@@ -92,6 +94,10 @@ class SignalingConnection(
         }
     }
 
+    /**
+     * Функция обработки первичного ответа от сервера.
+     * Устанавливает поток для пакетов поддержания жизни
+     */
     private suspend fun handleInitialResponse(
         initialResponse: InitialUserConnectionResponse,
         requestChannel: Channel<UserConnectionRequest>
@@ -102,9 +108,13 @@ class SignalingConnection(
         startKeepAliveFlow(requestChannel, intervalMillis)
     }
 
+    /*
+    * Обрабатывает ответ со списком пользователя
+    * Логика: обновляет свою переменную списка, присваивая каждый раз новую ссылку.
+    * */
     private fun handleUsersList(usersList: UsersList) {
-        val users = usersList.usersList
-        Timber.i("Active users: ${users.joinToString { it.name }}")
+        this.usersList = usersList.usersList;
+        Timber.i("Active users: ${this.usersList.joinToString { it.name }}")
     }
 
     private suspend fun handleSessionDescription(sdp: SessionDescription) {
@@ -173,6 +183,8 @@ class SignalingConnection(
     fun observeIceCandidates(): SharedFlow<IceCandidatesMessage> = outgoingIceCandidatesFlow
 
     fun observeSDP(): SharedFlow<SessionDescription> = sdpFlow
+
+    fun getUsersList(): List<User> = usersList
 
     fun disconnect() {
         coroutineScope.launch {
