@@ -78,12 +78,12 @@ message User {
   int32 port = 3;
 }
 
-// --- Новые сообщения для WebRTC-сигналинга ---
-
 // Обмен SDP
 message SessionDescription {
-  string type = 1; // "offer" или "answer"
-  string sdp = 2;
+  string sender = 1;
+  string receiver = 2;
+  string type = 3; // "offer" или "answer"
+  string sdp = 4;
 }
 
 // ICE-кандидат (отдельное сообщение)
