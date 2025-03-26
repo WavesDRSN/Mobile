@@ -16,17 +16,18 @@ import ru.drsn.waves.webrtc.utils.DataModelType
 class WebRTCManager (
     private val context: Context,
     observer: PeerConnection.Observer,
-    private val username: String
+    val username: String
 ) {
     private var peerConnectionFactory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
-    private val iceServer = TODO("тут что-то должно быть")
+    private val iceServer = listOf(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer())
     private var localAudioSource: AudioSource? = null
     private var localAudioTrack: AudioTrack? = null
     private var localStream: MediaStream? = null
     private var mediaConstraints = MediaConstraints()
+    private val iceCandidates = mutableListOf<IceCandidate>()
 
-    val listener: Listener? = null
+    var listener: Listener? = null
 
     init {
         initPeerConnectionFactory()
@@ -38,9 +39,7 @@ class WebRTCManager (
         localAudioTrack = peerConnectionFactory!!.createAudioTrack("local_audio", localAudioSource)
 
         // Создаем и добавляем локальный медиапоток
-        localStream = peerConnectionFactory!!.createLocalMediaStream("local_stream")
-        localStream!!.addTrack(localAudioTrack)
-        peerConnection?.addStream(localStream)
+        peerConnection?.addTrack(localAudioTrack, listOf("local_stream"))
 
         // Настройки для получения только аудио (потом можно будет добавить и видео)
         mediaConstraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
@@ -76,13 +75,12 @@ class WebRTCManager (
     // Функция для начала вызова (создание SDP-предложения)
     fun call(target: String) {
         peerConnection?.createOffer(object : SdpObserver() {
-            override fun onCreateSuccess(sessionDescription: SessionDescription?) {
-                super.onCreateSuccess(sessionDescription)
-                sessionDescription?.let {
+            override fun onCreateSuccess(p0: SessionDescription?) {
+                super.onCreateSuccess(p0)
+                p0?.let {
                     peerConnection!!.setLocalDescription(object : SdpObserver() {
                         override fun onSetSuccess() {
                             super.onSetSuccess()
-                            // Отправляем предложение удаленному пиру
                             listener?.onTransferDataToOtherPeer(
                                 DataModel(target, username, it.description, DataModelType.Offer)
                             )
@@ -122,13 +120,26 @@ class WebRTCManager (
 
 
     // Добавление ICE-кандидата, полученного от удаленного пира
-    fun addIceCandidate(iceCandidate: IceCandidate) {
+    fun addIceCandidate(iceCandidate: IceCandidate?) {
         peerConnection?.addIceCandidate(iceCandidate)
     }
 
     // Включение или отключение аудио
     fun toggleAudio(shouldBeMuted: Boolean) {
         localAudioTrack?.setEnabled(!shouldBeMuted)
+    }
+
+    fun isConnected(): Boolean {
+        return peerConnection?.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED
+    }
+
+
+    fun hasIceCandidates(): Boolean {
+        return iceCandidates.isNotEmpty()
+    }
+
+    fun getConnectionState(): PeerConnection.PeerConnectionState? {
+        return peerConnection?.connectionState()
     }
 
 
