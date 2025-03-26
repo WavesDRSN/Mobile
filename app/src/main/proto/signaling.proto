@@ -16,7 +16,7 @@ service UserConnection {
   rpc ExchangeSDP(SessionDescription) returns (SessionDescription);
 
   // Отправка группы ICE-кандидатов
-  rpc SendIceCandidates(IceCandidatesMessage) returns (google.protobuf.Empty);
+  rpc SendIceCandidates(stream IceCandidatesMessage) returns (stream IceCandidatesMessage);
 }
 
 message DisconnectResponse {

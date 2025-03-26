@@ -44,7 +44,10 @@ class SignalingConnection(
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    val sdpFlow = MutableSharedFlow<SessionDescription>()
+    private val sdpFlow = MutableSharedFlow<SessionDescription>()
+    private val iceCandidatesFlow = MutableSharedFlow<IceCandidatesMessage>(extraBufferCapacity = 10)
+    private val outgoingIceCandidatesFlow = MutableSharedFlow<IceCandidatesMessage>(extraBufferCapacity = 10)
+
 
     fun connect() {
         coroutineScope.launch {
@@ -52,6 +55,7 @@ class SignalingConnection(
             sendInitialRequest(requestChannel)
             // Запускаем прослушивание сообщений от сервера, преобразуя канал в Flow
             listenForServerMessages(requestChannel.receiveAsFlow())
+            listenForIceCandidates()
         }
     }
 
@@ -142,6 +146,33 @@ class SignalingConnection(
             Timber.i("Sent SDP $type to $target")
         }
     }
+
+    private fun listenForIceCandidates() {
+        coroutineScope.launch {
+            try {
+                stub.sendIceCandidates(iceCandidatesFlow)
+                    .collect { iceCandidatesMessage ->
+                        Timber.i("Received ICE candidates from ${iceCandidatesMessage.sender}")
+                        outgoingIceCandidatesFlow.emit(iceCandidatesMessage)
+                    }
+            } catch (e: Exception) {
+                Timber.e(e, "Error receiving ICE candidates")
+            }
+        }
+    }
+
+    suspend fun sendIceCandidate(candidate: IceCandidate, target: String) {
+        val message = IceCandidatesMessage.newBuilder()
+            .setReceiver(target)
+            .addCandidates(candidate)
+            .build()
+
+        iceCandidatesFlow.emit(message)
+    }
+
+    fun observeIceCandidates(): SharedFlow<IceCandidatesMessage> = outgoingIceCandidatesFlow
+
+    fun observeSDP(): SharedFlow<SessionDescription> = sdpFlow
 
     fun disconnect() {
         coroutineScope.launch {
