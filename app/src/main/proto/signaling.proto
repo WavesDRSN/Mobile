@@ -61,6 +61,8 @@ message UserConnectionResponse {
     InitialUserConnectionResponse initial_response = 1;
     // Список активных пользователей
     UsersList users_list = 2;
+    // SDP для обмена предложениями/ответами
+    SessionDescription session_description = 3;
   }
 }
 
