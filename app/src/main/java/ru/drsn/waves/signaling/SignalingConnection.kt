@@ -44,6 +44,8 @@ class SignalingConnection(
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    val sdpFlow = MutableSharedFlow<SessionDescription>()
+
     fun connect() {
         coroutineScope.launch {
             // Сначала отправляем InitialRequest через канал
@@ -81,6 +83,7 @@ class SignalingConnection(
         when {
             response.hasInitialResponse() -> handleInitialResponse(response.initialResponse, requestChannel)
             response.hasUsersList() -> handleUsersList(response.usersList)
+            response.hasSessionDescription() -> handleSessionDescription(response.sessionDescription)
             else -> Timber.w("Received unhandled response type")
         }
     }
@@ -98,6 +101,11 @@ class SignalingConnection(
     private fun handleUsersList(usersList: UsersList) {
         val users = usersList.usersList
         Timber.i("Active users: ${users.joinToString { it.name }}")
+    }
+
+    private suspend fun handleSessionDescription(sdp: SessionDescription) {
+        Timber.i("Received SDP ${sdp.type} from ${sdp.sender}")
+        sdpFlow.emit(sdp)
     }
 
     private fun startKeepAliveFlow(requestChannel: SendChannel<UserConnectionRequest>, intervalMillis: Long) {
@@ -122,8 +130,6 @@ class SignalingConnection(
         Timber.d("Sent keep-alive packet")
     }
 
-
-
     fun sendSDP(type: String, sdp: String, target: String) {
         coroutineScope.launch {
             stub.exchangeSDP(
@@ -133,6 +139,7 @@ class SignalingConnection(
                     .setReceiver(target)
                     .build()
             )
+            Timber.i("Sent SDP $type to $target")
         }
     }
 
