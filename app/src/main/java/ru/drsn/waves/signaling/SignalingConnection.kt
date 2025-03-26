@@ -36,7 +36,8 @@ class SignalingConnection(
     private val stub: UserConnectionGrpcKt.UserConnectionCoroutineStub =
         UserConnectionGrpcKt.UserConnectionCoroutineStub(channel)
 
-    private var usersList: List<User> = ArrayList<User>();
+    private val _usersListFlow = MutableStateFlow<List<User>>(emptyList())
+    val usersListStateFlow: StateFlow<List<User>> = _usersListFlow.asStateFlow()
 
     private val isConnected = AtomicBoolean(false)
 
@@ -112,9 +113,10 @@ class SignalingConnection(
     * Обрабатывает ответ со списком пользователя
     * Логика: обновляет свою переменную списка, присваивая каждый раз новую ссылку.
     * */
-    private fun handleUsersList(usersList: UsersList) {
-        this.usersList = usersList.usersList;
-        Timber.i("Active users: ${this.usersList.joinToString { it.name }}")
+    private suspend fun handleUsersList(usersList: UsersList) {
+        val users = usersList.usersList;
+        _usersListFlow.emit(users);
+        Timber.i("Active users: ${users.joinToString { it.name }}")
     }
 
     private suspend fun handleSessionDescription(sdp: SessionDescription) {
@@ -183,8 +185,6 @@ class SignalingConnection(
     fun observeIceCandidates(): SharedFlow<IceCandidatesMessage> = outgoingIceCandidatesFlow
 
     fun observeSDP(): SharedFlow<SessionDescription> = sdpFlow
-
-    fun getUsersList(): List<User> = usersList
 
     fun disconnect() {
         coroutineScope.launch {
