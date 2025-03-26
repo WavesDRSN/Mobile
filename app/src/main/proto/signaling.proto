@@ -76,8 +76,6 @@ message UsersList {
 
 message User {
   string name = 1;
-  string IP_address = 2;
-  int32 port = 3;
 }
 
 // Обмен SDP
