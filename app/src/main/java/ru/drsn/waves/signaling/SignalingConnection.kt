@@ -173,10 +173,10 @@ class SignalingConnection(
         }
     }
 
-    suspend fun sendIceCandidate(candidate: IceCandidate, target: String) {
+    suspend fun sendIceCandidates(candidates: List<IceCandidate>, target: String) {
         val message = IceCandidatesMessage.newBuilder()
             .setReceiver(target)
-            .addCandidates(candidate)
+            .addAllCandidates(candidates)
             .build()
 
         iceCandidatesFlow.emit(message)
@@ -185,6 +185,8 @@ class SignalingConnection(
     fun observeIceCandidates(): SharedFlow<IceCandidatesMessage> = outgoingIceCandidatesFlow
 
     fun observeSDP(): SharedFlow<SessionDescription> = sdpFlow
+
+    fun observeUsersList(): StateFlow<List<User>> = usersListStateFlow
 
     fun disconnect() {
         coroutineScope.launch {

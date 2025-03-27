@@ -27,7 +27,6 @@ class SafeSignalingConnection(private val delegate: SignalingConnection) {
 
     suspend fun disconnect() = executeWithHandling { delegate.disconnect() }
 
-
     fun observeSDP(): SharedFlow<SessionDescription> = delegate.observeSDP()
 
     fun observeIceCandidates(): SharedFlow<IceCandidatesMessage> = delegate.observeIceCandidates()
