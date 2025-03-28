@@ -47,7 +47,8 @@ class SignalingConnection(
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private val sdpFlow = MutableSharedFlow<SessionDescription>()
+    private val SDPFlow = MutableSharedFlow<SessionDescription>()
+    private val outgoingSDPFlow = MutableSharedFlow<SessionDescription>()
     private val iceCandidatesFlow = MutableSharedFlow<IceCandidatesMessage>(extraBufferCapacity = 10)
     private val outgoingIceCandidatesFlow = MutableSharedFlow<IceCandidatesMessage>(extraBufferCapacity = 10)
 
@@ -57,6 +58,7 @@ class SignalingConnection(
             // Сначала отправляем InitialRequest через канал
             sendInitialRequest(requestChannel)
             listenForIceCandidates()
+            listenForSDP()
             // Запускаем прослушивание сообщений от сервера, преобразуя канал в Flow
             listenForServerMessages(requestChannel.receiveAsFlow())
         }
@@ -90,7 +92,6 @@ class SignalingConnection(
         when {
             response.hasInitialResponse() -> handleInitialResponse(response.initialResponse, requestChannel)
             response.hasUsersList() -> handleUsersList(response.usersList)
-            response.hasSessionDescription() -> handleSessionDescription(response.sessionDescription)
             else -> Timber.w("Received unhandled response type")
         }
     }
@@ -121,7 +122,7 @@ class SignalingConnection(
 
     private suspend fun handleSessionDescription(sdp: SessionDescription) {
         Timber.i("Received SDP ${sdp.type} from ${sdp.sender}")
-        sdpFlow.emit(sdp)
+        outgoingSDPFlow.emit(sdp)
     }
 
     private fun startKeepAliveFlow(requestChannel: SendChannel<UserConnectionRequest>, intervalMillis: Long) {
@@ -146,17 +147,26 @@ class SignalingConnection(
         Timber.d("Sent keep-alive packet")
     }
 
+    private fun listenForSDP() {
+        coroutineScope.launch {
+            stub.exchangeSDP(SDPFlow)
+                .collect{ sessionDescription ->
+                    Timber.d("get SDP from ${sessionDescription.sender}}")
+                    outgoingSDPFlow.emit(sessionDescription)
+                }
+        }
+    }
+
     fun sendSDP(type: String, sdp: String, target: String) {
         coroutineScope.launch {
-            val request = UserConnectionRequest.newBuilder().
-            setSessionDescription(
-                SessionDescription.newBuilder()
+            val request = SessionDescription.newBuilder()
                     .setSdp(sdp)
                     .setType(type)
                     .setReceiver(target)
                     .build()
-            ).build()
-            requestChannel.send(request)
+
+            SDPFlow.emit(request)
+
             Timber.d("Sent SDP $type to $target")
         }
     }
@@ -185,7 +195,7 @@ class SignalingConnection(
 
     fun observeIceCandidates(): SharedFlow<IceCandidatesMessage> = outgoingIceCandidatesFlow
 
-    fun observeSDP(): SharedFlow<SessionDescription> = sdpFlow
+    fun observeSDP(): SharedFlow<SessionDescription> = outgoingSDPFlow
 
     fun observeUsersList(): StateFlow<List<User>> = usersListStateFlow
 

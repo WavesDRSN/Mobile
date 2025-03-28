@@ -14,7 +14,7 @@ service UserConnection {
   rpc UserDisconnect(DisconnectRequest) returns (DisconnectResponse);
 
   // Обмен SDP предложением и ответом
-  rpc ExchangeSDP(SessionDescription) returns (SessionDescription);
+  rpc ExchangeSDP(stream SessionDescription) returns (stream SessionDescription);
 
   // Отправка группы ICE-кандидатов
   rpc SendIceCandidates(stream IceCandidatesMessage) returns (stream IceCandidatesMessage);
@@ -44,8 +44,6 @@ message UserConnectionRequest {
     InitialUserConnectionRequest initial_request = 1;
     // Пакет жизни для подтверждения активности
     AlivePacket still_alive = 2;
-
-    SessionDescription session_description = 3;
   }
 }
 
@@ -64,8 +62,6 @@ message UserConnectionResponse {
     InitialUserConnectionResponse initial_response = 1;
     // Список активных пользователей
     UsersList users_list = 2;
-    // SDP для обмена предложениями/ответами
-    SessionDescription session_description = 3;
   }
 }
 

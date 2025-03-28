@@ -1,6 +1,5 @@
 package ru.drsn.waves.signaling
 
-import com.google.protobuf.Empty
 import gRPC.v1.IceCandidate
 import gRPC.v1.User
 import kotlinx.coroutines.CoroutineScope
