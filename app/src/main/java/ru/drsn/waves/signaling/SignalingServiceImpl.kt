@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import timber.log.Timber
 
 class SignalingServiceImpl: SignalingService {
 
@@ -21,21 +22,26 @@ class SignalingServiceImpl: SignalingService {
 
     private var userName: String = ""
 
-    override suspend fun connect(
+    override fun connect(
         username: String,
         host: String,
         port: Int
     ) {
 
         signalingConnection = SafeSignalingConnection(SignalingConnection(host, port, username))
-        signalingConnection!!.connect()
 
         userName = username
 
-        signalingConnection!!.observeUsersList()
-            .onEach { newList -> _usersList.value = newList }
-            .launchIn(serviceScope)
+        serviceScope.launch {
+            signalingConnection!!.connect()
 
+            signalingConnection!!.observeUsersList()
+                .onEach { newList -> _usersList.value = newList }
+                .launchIn(serviceScope)
+
+            observeSDP()
+            observeIceCandidates()
+        }
     }
 
     override suspend fun disconnect() {
@@ -50,10 +56,14 @@ class SignalingServiceImpl: SignalingService {
     override fun observeSDP() {
         serviceScope.launch {
             signalingConnection!!.observeSDP().collect { sessionDescription ->
+                Timber.d("received ${sessionDescription.type} from ${sessionDescription.sender}" +
+                        "\n${sessionDescription.sdp}")
+                /*
                 when (sessionDescription.type) {
                     "offer" -> TODO("Логика WebRTC при получение запроса")
                     "answer" -> TODO("Логика WebRTC при получение ответа")
                 }
+                 */
             }
         }
     }
@@ -62,10 +72,12 @@ class SignalingServiceImpl: SignalingService {
     }
 
     override fun observeIceCandidates() {
-        CoroutineScope(Dispatchers.IO).launch {
+        serviceScope.launch {
             signalingConnection!!.observeIceCandidates().collect { message ->
                 if (message.receiver == userName) {
-                    TODO("WebRTC add candidate to message.sender")
+                    Timber.d("${message.sender} sent ICE Candidates" +
+                            "\n${message.candidatesList.joinToString("\n")}")
+                    //TODO("WebRTC add candidate to message.sender")
                 }
             }
         }

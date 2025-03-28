@@ -56,9 +56,9 @@ class SignalingConnection(
         coroutineScope.launch {
             // Сначала отправляем InitialRequest через канал
             sendInitialRequest(requestChannel)
+            listenForIceCandidates()
             // Запускаем прослушивание сообщений от сервера, преобразуя канал в Flow
             listenForServerMessages(requestChannel.receiveAsFlow())
-            listenForIceCandidates()
         }
     }
 
@@ -148,28 +148,26 @@ class SignalingConnection(
 
     fun sendSDP(type: String, sdp: String, target: String) {
         coroutineScope.launch {
-            stub.exchangeSDP(
+            val request = UserConnectionRequest.newBuilder().
+            setSessionDescription(
                 SessionDescription.newBuilder()
                     .setSdp(sdp)
                     .setType(type)
                     .setReceiver(target)
                     .build()
-            )
+            ).build()
+            requestChannel.send(request)
             Timber.d("Sent SDP $type to $target")
         }
     }
 
     private fun listenForIceCandidates() {
         coroutineScope.launch {
-            try {
-                stub.sendIceCandidates(iceCandidatesFlow)
-                    .collect { iceCandidatesMessage ->
-                        Timber.d("Received ICE candidates from ${iceCandidatesMessage.sender}")
-                        outgoingIceCandidatesFlow.emit(iceCandidatesMessage)
-                    }
-            } catch (e: Exception) {
-                Timber.e(e, "Error receiving ICE candidates")
-            }
+            stub.sendIceCandidates(iceCandidatesFlow)
+                .collect { iceCandidatesMessage ->
+                    Timber.d("Received ICE candidates from ${iceCandidatesMessage.sender}")
+                    outgoingIceCandidatesFlow.emit(iceCandidatesMessage)
+                }
         }
     }
 
@@ -183,6 +181,7 @@ class SignalingConnection(
 
         iceCandidatesFlow.emit(message)
     }
+
 
     fun observeIceCandidates(): SharedFlow<IceCandidatesMessage> = outgoingIceCandidatesFlow
 

@@ -1,3 +1,4 @@
+
 syntax = "proto3";
 
 import "google/protobuf/duration.proto";
@@ -43,6 +44,8 @@ message UserConnectionRequest {
     InitialUserConnectionRequest initial_request = 1;
     // Пакет жизни для подтверждения активности
     AlivePacket still_alive = 2;
+
+    SessionDescription session_description = 3;
   }
 }
 

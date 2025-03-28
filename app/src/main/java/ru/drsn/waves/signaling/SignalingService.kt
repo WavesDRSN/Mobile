@@ -4,7 +4,7 @@ import gRPC.v1.*
 import kotlinx.coroutines.flow.StateFlow
 
 interface SignalingService {
-    suspend fun connect(username: String, host: String, port: Int)  // Подключение к серверу
+    fun connect(username: String, host: String, port: Int)  // Подключение к серверу
 
     suspend fun disconnect()  // Отключение от сервера
 
