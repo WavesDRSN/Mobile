@@ -25,7 +25,7 @@ class SignalingConnection(
     private val channel: ManagedChannel = ManagedChannelBuilder
         .forAddress(serverAddress, serverPort)
         .apply {
-            if (!BuildConfig.RELEASE) {
+            if (BuildConfig.RELEASE) {
                 usePlaintext()
             } else {
                 useTransportSecurity()
@@ -105,7 +105,7 @@ class SignalingConnection(
     ) {
         val intervalMillis = initialResponse.userKeepAliveInterval.seconds * 1000
         isConnected.set(true)
-        Timber.i("Connected to signaling server as $username with keep-alive interval: $intervalMillis ms")
+        Timber.d("Connected to signaling server as $username with keep-alive interval: $intervalMillis ms")
         startKeepAliveFlow(requestChannel, intervalMillis)
     }
 
@@ -155,7 +155,7 @@ class SignalingConnection(
                     .setReceiver(target)
                     .build()
             )
-            Timber.i("Sent SDP $type to $target")
+            Timber.d("Sent SDP $type to $target")
         }
     }
 
@@ -164,7 +164,7 @@ class SignalingConnection(
             try {
                 stub.sendIceCandidates(iceCandidatesFlow)
                     .collect { iceCandidatesMessage ->
-                        Timber.i("Received ICE candidates from ${iceCandidatesMessage.sender}")
+                        Timber.d("Received ICE candidates from ${iceCandidatesMessage.sender}")
                         outgoingIceCandidatesFlow.emit(iceCandidatesMessage)
                     }
             } catch (e: Exception) {
@@ -178,6 +178,8 @@ class SignalingConnection(
             .setReceiver(target)
             .addAllCandidates(candidates)
             .build()
+
+        Timber.d("Sent ICE Candidates $candidates to $target")
 
         iceCandidatesFlow.emit(message)
     }
@@ -193,7 +195,7 @@ class SignalingConnection(
             stub.userDisconnect(DisconnectRequest.newBuilder().setName(username).build())
             isConnected.set(false)
             channel.shutdown()
-            Timber.i("Disconnected from signaling server")
+            Timber.d("Disconnected from signaling server")
         }
     }
 }

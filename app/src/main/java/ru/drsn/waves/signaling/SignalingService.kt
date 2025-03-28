@@ -1,6 +1,7 @@
 package ru.drsn.waves.signaling
 
 import gRPC.v1.*
+import kotlinx.coroutines.flow.StateFlow
 
 interface SignalingService {
     suspend fun connect(username: String, host: String, port: Int)  // Подключение к серверу
@@ -15,5 +16,4 @@ interface SignalingService {
 
     fun observeIceCandidates()  // Подписка на ICE-кандидаты
 
-    fun getUsersList(): List<User>  // Получение списка активных пользователей
 }

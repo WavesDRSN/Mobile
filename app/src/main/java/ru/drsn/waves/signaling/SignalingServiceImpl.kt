@@ -1,32 +1,39 @@
 package ru.drsn.waves.signaling
 
+import com.google.protobuf.Empty
 import gRPC.v1.IceCandidate
 import gRPC.v1.User
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
-class SignalingServiceImpl(
-    private var userName: String,
-    ) : SignalingService {
+class SignalingServiceImpl: SignalingService {
 
     private var signalingConnection: SafeSignalingConnection? = null
-    private var usersList: List<User> = emptyList();
+    private val _usersList = MutableStateFlow<List<User>>(emptyList()) // Внутренний StateFlow
+    val usersList: StateFlow<List<User>> = _usersList // Открытый StateFlow для подписки
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    private var userName: String = ""
 
     override suspend fun connect(
         username: String,
         host: String,
         port: Int
     ) {
+
         signalingConnection = SafeSignalingConnection(SignalingConnection(host, port, username))
         signalingConnection!!.connect()
 
+        userName = username
+
         signalingConnection!!.observeUsersList()
-            .onEach { newList -> usersList = newList }
+            .onEach { newList -> _usersList.value = newList }
             .launchIn(serviceScope)
 
     }
@@ -63,6 +70,4 @@ class SignalingServiceImpl(
             }
         }
     }
-
-    override fun getUsersList(): List<User> = usersList
 }
