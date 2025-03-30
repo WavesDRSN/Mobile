@@ -1,0 +1,100 @@
+
+syntax = "proto3";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option java_multiple_files = true;
+option java_package = "gRPC.v1";
+option java_outer_classname = "UserConnectionProto";
+
+service UserConnection {
+  rpc LoadUsersList(stream UserConnectionRequest) returns (stream UserConnectionResponse);
+  rpc UserDisconnect(DisconnectRequest) returns (DisconnectResponse);
+
+  // Обмен SDP предложением и ответом
+  rpc ExchangeSDP(stream SessionDescription) returns (stream SessionDescription);
+
+  // Отправка группы ICE-кандидатов
+  rpc SendIceCandidates(stream IceCandidatesMessage) returns (stream IceCandidatesMessage);
+}
+
+message DisconnectResponse {
+  optional string text = 1;
+}
+
+message DisconnectRequest {
+  string name = 1;
+}
+
+enum UserConnectionErrorCode {
+  INVALID_USERNAME = 0;
+  NOT_ALIVE = 1;
+}
+
+message UserConnectionExceptionResponse {
+  google.protobuf.Timestamp timestamp = 1;
+  UserConnectionErrorCode error = 2;
+}
+
+message UserConnectionRequest {
+  oneof user_connection_request_type {
+    // Отправляется при первом запросе
+    InitialUserConnectionRequest initial_request = 1;
+    // Пакет жизни для подтверждения активности
+    AlivePacket still_alive = 2;
+  }
+}
+
+message InitialUserConnectionRequest {
+  string name = 1;
+}
+
+message AlivePacket {
+  string kiss_of_the_poseidon = 1;
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+message UserConnectionResponse {
+  oneof user_activity_response_type {
+    // Первичный ответ от сервера
+    InitialUserConnectionResponse initial_response = 1;
+    // Список активных пользователей
+    UsersList users_list = 2;
+  }
+}
+
+message InitialUserConnectionResponse {
+  google.protobuf.Duration user_keep_alive_interval = 1;
+}
+
+message UsersList {
+  repeated User users = 1;
+}
+
+message User {
+  string name = 1;
+}
+
+// Обмен SDP
+message SessionDescription {
+  string sender = 1;
+  string receiver = 2;
+  string type = 3; // "offer" или "answer"
+  string sdp = 4;
+}
+
+// ICE-кандидат (отдельное сообщение)
+message IceCandidate {
+  string sdpMid = 1;
+  int32 sdpMLineIndex = 2;
+  string candidate = 3;
+}
+
+// Группировка ICE-кандидатов в одно сообщение
+message IceCandidatesMessage {
+  string sender = 1;
+  string receiver = 2;
+  repeated IceCandidate candidates = 3;
+}
