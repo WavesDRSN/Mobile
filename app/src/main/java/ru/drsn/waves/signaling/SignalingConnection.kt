@@ -25,11 +25,13 @@ class SignalingConnection(
     private val channel: ManagedChannel = ManagedChannelBuilder
         .forAddress(serverAddress, serverPort)
         .apply {
+            usePlaintext()
+            /*
             if (BuildConfig.RELEASE) {
                 usePlaintext()
             } else {
-                useTransportSecurity()
-            }
+            useTransportSecurity()
+            }*/
         }
         .build()
 
@@ -57,8 +59,10 @@ class SignalingConnection(
         coroutineScope.launch {
             // Сначала отправляем InitialRequest через канал
             sendInitialRequest(requestChannel)
+
             listenForIceCandidates()
             listenForSDP()
+
             // Запускаем прослушивание сообщений от сервера, преобразуя канал в Flow
             listenForServerMessages(requestChannel.receiveAsFlow())
         }
@@ -106,6 +110,8 @@ class SignalingConnection(
     ) {
         val intervalMillis = initialResponse.userKeepAliveInterval.seconds * 1000
         isConnected.set(true)
+        sendSDP("","", "SERVER")
+        sendIceCandidates(emptyList(),"SERVER")
         Timber.d("Connected to signaling server as $username with keep-alive interval: $intervalMillis ms")
         startKeepAliveFlow(requestChannel, intervalMillis)
     }
@@ -151,7 +157,7 @@ class SignalingConnection(
         coroutineScope.launch {
             stub.exchangeSDP(SDPFlow)
                 .collect{ sessionDescription ->
-                    Timber.d("get SDP from ${sessionDescription.sender}}")
+                    Timber.d("get SDP from ${sessionDescription.sender}")
                     outgoingSDPFlow.emit(sessionDescription)
                 }
         }
@@ -160,10 +166,11 @@ class SignalingConnection(
     fun sendSDP(type: String, sdp: String, target: String) {
         coroutineScope.launch {
             val request = SessionDescription.newBuilder()
-                    .setSdp(sdp)
-                    .setType(type)
-                    .setReceiver(target)
-                    .build()
+                .setSdp(sdp)
+                .setType(type)
+                .setReceiver(target)
+                .setSender(username)
+                .build()
 
             SDPFlow.emit(request)
 
@@ -185,6 +192,7 @@ class SignalingConnection(
         val message = IceCandidatesMessage.newBuilder()
             .setReceiver(target)
             .addAllCandidates(candidates)
+            .setSender(username)
             .build()
 
         Timber.d("Sent ICE Candidates $candidates to $target")
