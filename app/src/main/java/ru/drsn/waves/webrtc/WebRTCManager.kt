@@ -16,7 +16,7 @@ import ru.drsn.waves.webrtc.utils.DataModelType
 class WebRTCManager (
     private val context: Context,
     observer: PeerConnection.Observer,
-    val username: String
+    var username: String
 ) {
     private var peerConnectionFactory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
