@@ -11,7 +11,7 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.SessionDescription
 import ru.drsn.waves.webrtc.utils.DataModel
 import ru.drsn.waves.webrtc.utils.DataModelType
-
+import timber.log.Timber
 
 class WebRTCManager (
     private val context: Context,
@@ -30,25 +30,22 @@ class WebRTCManager (
     var listener: Listener? = null
 
     init {
+        Timber.d("Инициализация WebRTCManager для пользователя: $username")
         initPeerConnectionFactory()
         peerConnectionFactory = createPeerConnectionFactory()
         peerConnection = createPeerConnection(observer)
 
-        // Создаем источник аудио и трек
         localAudioSource = peerConnectionFactory!!.createAudioSource(MediaConstraints())
         localAudioTrack = peerConnectionFactory!!.createAudioTrack("local_audio", localAudioSource)
-
-        // Создаем и добавляем локальный медиапоток
         peerConnection?.addTrack(localAudioTrack, listOf("local_stream"))
 
-        // Настройки для получения только аудио (потом можно будет добавить и видео)
         mediaConstraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
         mediaConstraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
     }
 
-
-    //инициализщация PeerConnectionFactory
+    // Инициализация PeerConnectionFactory
     private fun initPeerConnectionFactory() {
+        Timber.d("Инициализация PeerConnectionFactory")
         val options = PeerConnectionFactory.InitializationOptions.builder(context)
             .setFieldTrials("WebRTC-H264HighProfile/Enabled/")
             .createInitializationOptions()
@@ -57,9 +54,10 @@ class WebRTCManager (
 
     // Создание PeerConnectionFactory
     private fun createPeerConnectionFactory(): PeerConnectionFactory {
+        Timber.d("Создание PeerConnectionFactory")
         val options = PeerConnectionFactory.Options().apply {
-            disableEncryption = false // Не отключаем шифрование
-            disableNetworkMonitor = false // Используем сетевой монитор
+            disableEncryption = false
+            disableNetworkMonitor = false
         }
         return PeerConnectionFactory.builder()
             .setOptions(options)
@@ -68,19 +66,20 @@ class WebRTCManager (
 
     // Создание PeerConnection
     private fun createPeerConnection(observer: PeerConnection.Observer): PeerConnection {
+        Timber.d("Создание PeerConnection")
         return peerConnectionFactory?.createPeerConnection(iceServer, observer)!!
     }
 
-
-    // Функция для начала вызова (создание SDP-предложения)
+    // Создание SDP-предложения (начало вызова)
     fun call(target: String) {
+        Timber.d("Создание SDP-предложения для пользователя: $target")
         peerConnection?.createOffer(object : SdpObserver() {
             override fun onCreateSuccess(p0: SessionDescription?) {
-                super.onCreateSuccess(p0)
                 p0?.let {
+                    Timber.d("SDP-предложение успешно создано")
                     peerConnection!!.setLocalDescription(object : SdpObserver() {
                         override fun onSetSuccess() {
-                            super.onSetSuccess()
+                            Timber.d("Локальное описание установлено. Отправка оффера пользователю: $target")
                             listener?.onTransferDataToOtherPeer(
                                 DataModel(target, username, it.description, DataModelType.Offer)
                             )
@@ -91,17 +90,16 @@ class WebRTCManager (
         }, mediaConstraints)
     }
 
-
-    // Функция для ответа на вызов (создание SDP-ответа)
+    // Создание SDP-ответа (принятие вызова)
     fun answer(target: String) {
+        Timber.d("Создание SDP-ответа для пользователя: $target")
         peerConnection?.createAnswer(object : SdpObserver() {
             override fun onCreateSuccess(p0: SessionDescription?) {
-                super.onCreateSuccess(p0)
                 p0?.let {
+                    Timber.d("SDP-ответ успешно создан")
                     peerConnection!!.setLocalDescription(object : SdpObserver() {
                         override fun onSetSuccess() {
-                            super.onSetSuccess()
-                            // Отправляем ответ удаленному пиру
+                            Timber.d("Локальное описание установлено. Отправка ответа пользователю: $target")
                             listener?.onTransferDataToOtherPeer(
                                 DataModel(target, username, it.description, DataModelType.Answer)
                             )
@@ -112,47 +110,55 @@ class WebRTCManager (
         }, mediaConstraints)
     }
 
-
-    // Установка удаленного SDP-описания (получено от другого пира)
+    // Установка удаленного SDP-описания
     fun onRemoteSessionReceived(sessionDescription: SessionDescription) {
+        Timber.d("Получено удаленное SDP-описание: ${sessionDescription.type}")
         peerConnection?.setRemoteDescription(SdpObserver(), sessionDescription)
     }
 
-
-    // Добавление ICE-кандидата, полученного от удаленного пира
+    // Добавление ICE-кандидата
     fun addIceCandidate(iceCandidate: IceCandidate?) {
+        Timber.d("Добавление ICE-кандидата: ${iceCandidate?.sdpMid}")
         peerConnection?.addIceCandidate(iceCandidate)
     }
 
-    // Включение или отключение аудио
+    // Включение/отключение микрофона
     fun toggleAudio(shouldBeMuted: Boolean) {
+        Timber.d("Изменение состояния микрофона. Отключен: $shouldBeMuted")
         localAudioTrack?.setEnabled(!shouldBeMuted)
     }
 
+    // Проверка соединения
     fun isConnected(): Boolean {
-        return peerConnection?.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED
+        val connected = peerConnection?.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED
+        Timber.d("Проверка соединения: $connected")
+        return connected
     }
 
-
+    // Проверка наличия ICE-кандидатов
     fun hasIceCandidates(): Boolean {
-        return iceCandidates.isNotEmpty()
+        val hasCandidates = iceCandidates.isNotEmpty()
+        Timber.d("Проверка ICE-кандидатов: $hasCandidates")
+        return hasCandidates
     }
 
+    // Получение состояния соединения
     fun getConnectionState(): PeerConnection.PeerConnectionState? {
-        return peerConnection?.connectionState()
+        val state = peerConnection?.connectionState()
+        Timber.d("Текущее состояние соединения: $state")
+        return state
     }
 
-
-    // Закрытие соединения и освобождение ресурсов
+    // Закрытие соединения
     fun closeConnection() {
+        Timber.d("Закрытие соединения и освобождение ресурсов")
         try {
             localAudioTrack?.dispose()
             peerConnection?.close()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Timber.e(e, "Ошибка при закрытии соединения")
         }
     }
-
 
     // Интерфейс для передачи данных другому пиру
     interface Listener {
