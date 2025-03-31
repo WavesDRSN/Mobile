@@ -1,5 +1,6 @@
 package ru.drsn.waves.signaling
 
+import com.google.protobuf.Empty
 import com.google.protobuf.Timestamp
 import gRPC.v1.*
 import io.grpc.ManagedChannel
@@ -49,10 +50,14 @@ class SignalingConnection(
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private val SDPFlow = MutableSharedFlow<SessionDescription>()
+    private val SDPFlow = MutableSharedFlow<SDPExchange>()
     private val outgoingSDPFlow = MutableSharedFlow<SessionDescription>()
-    private val iceCandidatesFlow = MutableSharedFlow<IceCandidatesMessage>(extraBufferCapacity = 10)
+    private val iceCandidatesFlow = MutableSharedFlow<ICEExchange>(extraBufferCapacity = 10)
     private val outgoingIceCandidatesFlow = MutableSharedFlow<IceCandidatesMessage>(extraBufferCapacity = 10)
+
+    private var userKey: String = ""
+    private var sdpInstalled = AtomicBoolean(false)
+    private var iceInstalled = AtomicBoolean(false)
 
 
     fun connect() {
@@ -110,8 +115,10 @@ class SignalingConnection(
     ) {
         val intervalMillis = initialResponse.userKeepAliveInterval.seconds * 1000
         isConnected.set(true)
-        sendSDP("","", "SERVER")
-        sendIceCandidates(emptyList(),"SERVER")
+
+        sendICEInitialConnect()
+        sendSDPInitialConnect()
+
         Timber.d("Connected to signaling server as $username with keep-alive interval: $intervalMillis ms")
         startKeepAliveFlow(requestChannel, intervalMillis)
     }
@@ -156,21 +163,30 @@ class SignalingConnection(
     private fun listenForSDP() {
         coroutineScope.launch {
             stub.exchangeSDP(SDPFlow)
-                .collect{ sessionDescription ->
-                    Timber.d("get SDP from ${sessionDescription.sender}")
-                    outgoingSDPFlow.emit(sessionDescription)
+                .collect{ sdpExchangeMessage ->
+                    if (sdpExchangeMessage.hasInitialResponse()) {
+                        if (sdpExchangeMessage.initialResponse.approved) sdpInstalled.set(true)
+                        Timber.d("sdp flow initialized")
+                    }
+                    else if (sdpExchangeMessage.hasSessionDescription()) {
+                        val sessionDescription = sdpExchangeMessage.sessionDescription
+                        Timber.d("get SDP from ${sessionDescription.sender}")
+                        outgoingSDPFlow.emit(sessionDescription)
+                    }
                 }
         }
     }
 
     fun sendSDP(type: String, sdp: String, target: String) {
         coroutineScope.launch {
-            val request = SessionDescription.newBuilder()
-                .setSdp(sdp)
-                .setType(type)
-                .setReceiver(target)
-                .setSender(username)
-                .build()
+            val request = SDPExchange.newBuilder().setSessionDescription(
+                SessionDescription.newBuilder()
+                    .setSdp(sdp)
+                    .setType(type)
+                    .setReceiver(target)
+                    .setSender(username)
+                    .build()
+            ).build()
 
             SDPFlow.emit(request)
 
@@ -181,25 +197,63 @@ class SignalingConnection(
     private fun listenForIceCandidates() {
         coroutineScope.launch {
             stub.sendIceCandidates(iceCandidatesFlow)
-                .collect { iceCandidatesMessage ->
-                    Timber.d("Received ICE candidates from ${iceCandidatesMessage.sender}")
-                    outgoingIceCandidatesFlow.emit(iceCandidatesMessage)
+                .collect { iceExchangeMessage ->
+                    if (iceExchangeMessage.hasInitialResponse()) {
+                        if (iceExchangeMessage.initialResponse.approved) iceInstalled.set(true)
+                        Timber.d("ice flow initialized")
+                    }
+                    else if(iceExchangeMessage.hasIceCandidates()) {
+                        val iceCandidatesMessage = iceExchangeMessage.iceCandidates
+                        Timber.d("Received ICE candidates from ${iceCandidatesMessage.sender}")
+                        outgoingIceCandidatesFlow.emit(iceCandidatesMessage)
+                    }
                 }
         }
     }
 
     suspend fun sendIceCandidates(candidates: List<IceCandidate>, target: String) {
-        val message = IceCandidatesMessage.newBuilder()
-            .setReceiver(target)
-            .addAllCandidates(candidates)
-            .setSender(username)
+        if (iceInstalled.get()) {
+            val message = ICEExchange.newBuilder().setIceCandidates(
+                IceCandidatesMessage.newBuilder()
+                    .setReceiver(target)
+                    .addAllCandidates(candidates)
+                    .setSender(username)
+                    .build()
+            ).build()
+
+            Timber.d("Sent ICE Candidates $candidates to $target")
+
+            iceCandidatesFlow.emit(message)
+        }
+    }
+
+    suspend fun sendSDPInitialConnect() {
+        val message = SDPExchange.newBuilder()
+            .setInitialRequest(
+                SDPStreamInitialRequest.newBuilder()
+                    .setKey(userKey)
+                    .build()
+            )
             .build()
 
-        Timber.d("Sent ICE Candidates $candidates to $target")
+        Timber.d("sent sdp init message")
+
+        SDPFlow.emit(message)
+    }
+
+    suspend fun sendICEInitialConnect() {
+        val message = ICEExchange.newBuilder()
+            .setInitialRequest(
+                ICEStreamInitialRequest.newBuilder()
+                    .setKey(userKey)
+                    .build()
+            )
+            .build()
+
+        Timber.d("sent ice init message")
 
         iceCandidatesFlow.emit(message)
     }
-
 
     fun observeIceCandidates(): SharedFlow<IceCandidatesMessage> = outgoingIceCandidatesFlow
 
