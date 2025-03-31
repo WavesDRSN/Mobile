@@ -1,6 +1,5 @@
 package ru.drsn.waves.signaling
 
-import com.google.protobuf.Empty
 import com.google.protobuf.Timestamp
 import gRPC.v1.*
 import io.grpc.ManagedChannel
@@ -14,7 +13,6 @@ import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import ru.drsn.waves.BuildConfig
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -131,11 +129,6 @@ class SignalingConnection(
         val users = usersList.usersList;
         _usersListFlow.emit(users);
         Timber.i("Active users: ${users.joinToString { it.name }}")
-    }
-
-    private suspend fun handleSessionDescription(sdp: SessionDescription) {
-        Timber.i("Received SDP ${sdp.type} from ${sdp.sender}")
-        outgoingSDPFlow.emit(sdp)
     }
 
     private fun startKeepAliveFlow(requestChannel: SendChannel<UserConnectionRequest>, intervalMillis: Long) {
