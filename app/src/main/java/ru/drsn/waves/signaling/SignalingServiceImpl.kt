@@ -60,17 +60,18 @@ class SignalingServiceImpl(
             signalingConnection!!.observeSDP().collect { sessionDescription ->
                 Timber.d("received ${sessionDescription.type} from ${sessionDescription.sender}" +
                         "\n${sessionDescription.sdp}")
+
                 when (sessionDescription.type) {
                     "offer" -> {
                         webRTCManager.username = userName
-                        // При получении оффера устанавливаем удаленное описание и отправляем ответ
-                        webRTCManager.onRemoteSessionReceived(SessionDescription(SessionDescription.Type.OFFER, sessionDescription.sdp))
+
+                        webRTCManager.onRemoteSessionReceived(userName, SessionDescription(SessionDescription.Type.OFFER, sessionDescription.sdp))
                         webRTCManager.answer(sessionDescription.sender)
                     }
                     "answer" -> {
                         webRTCManager.username = userName
-                        // При получении ответа устанавливаем удаленное описание
-                        webRTCManager.onRemoteSessionReceived(SessionDescription(SessionDescription.Type.ANSWER, sessionDescription.sdp))
+
+                        webRTCManager.onRemoteSessionReceived(userName, SessionDescription(SessionDescription.Type.ANSWER, sessionDescription.sdp))
                     }
                 }
             }
@@ -87,7 +88,7 @@ class SignalingServiceImpl(
                     Timber.d("${message.sender} sent ICE Candidates" +
                             "\n${message.candidatesList.joinToString("\n")}")
                     message.candidatesList.forEach { candidate ->
-                        webRTCManager.addIceCandidate(
+                        webRTCManager.addIceCandidate(userName,
                             org.webrtc.IceCandidate(
                                 candidate.sdpMid,
                                 candidate.sdpMLineIndex,
