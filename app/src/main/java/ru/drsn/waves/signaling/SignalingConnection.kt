@@ -188,16 +188,18 @@ class SignalingConnection(
         }
     }
 
-    suspend fun sendIceCandidates(candidates: List<IceCandidate>, target: String) {
-        val message = IceCandidatesMessage.newBuilder()
-            .setReceiver(target)
-            .addAllCandidates(candidates)
-            .setSender(username)
-            .build()
+    fun sendIceCandidates(candidates: List<IceCandidate>, target: String) {
+        coroutineScope.launch {
+            val message = IceCandidatesMessage.newBuilder()
+                .setReceiver(target)
+                .addAllCandidates(candidates)
+                .setSender(username)
+                .build()
 
-        Timber.d("Sent ICE Candidates $candidates to $target")
+            Timber.d("Sent ICE Candidates $candidates to $target")
 
-        iceCandidatesFlow.emit(message)
+            iceCandidatesFlow.emit(message)
+        }
     }
 
 

@@ -5,18 +5,20 @@ import gRPC.v1.User
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.webrtc.SessionDescription
+import ru.drsn.waves.webrtc.SdpObserver
 import ru.drsn.waves.webrtc.WebRTCManager
 import timber.log.Timber
 
-class SignalingServiceImpl(
-    private val webRTCManager: WebRTCManager
-): SignalingService {
+class SignalingServiceImpl: SignalingService {
+
+    lateinit var webRTCManager: WebRTCManager
 
     private var signalingConnection: SafeSignalingConnection? = null
     private val _usersList = MutableStateFlow<List<User>>(emptyList()) // Внутренний StateFlow
@@ -38,7 +40,12 @@ class SignalingServiceImpl(
             signalingConnection!!.connect()
 
             signalingConnection!!.observeUsersList()
-                .onEach { newList -> _usersList.value = newList }
+                .onEach { newList ->
+                    _usersList.value = newList
+                    newList.forEach {
+                        webRTCManager.getOrCreateConnection(it.name)
+                    }
+                }
                 .launchIn(serviceScope)
 
             observeSDP()
@@ -61,22 +68,30 @@ class SignalingServiceImpl(
                 Timber.d("received ${sessionDescription.type} from ${sessionDescription.sender}" +
                         "\n${sessionDescription.sdp}")
 
-                when (sessionDescription.type) {
-                    "offer" -> {
-                        webRTCManager.username = userName
+                val peerConnection = webRTCManager.getOrCreateConnection(sessionDescription.sender)
 
-                        webRTCManager.onRemoteSessionReceived(userName, SessionDescription(SessionDescription.Type.OFFER, sessionDescription.sdp))
-                        webRTCManager.answer(sessionDescription.sender)
-                    }
-                    "answer" -> {
-                        webRTCManager.username = userName
+                val remoteSDP = SessionDescription(
+                    if (sessionDescription.type == "offer") SessionDescription.Type.OFFER else SessionDescription.Type.ANSWER,
+                    sessionDescription.sdp
+                )
 
-                        webRTCManager.onRemoteSessionReceived(userName, SessionDescription(SessionDescription.Type.ANSWER, sessionDescription.sdp))
+                peerConnection.setRemoteDescription(object : SdpObserver() {
+                    override fun onSetSuccess() {
+                        Timber.d("Remote SDP set successfully for ${sessionDescription.sender}")
+
+                        if (sessionDescription.type == "offer") {
+                            webRTCManager.answer(sessionDescription.sender)
+                        }
                     }
-                }
+
+                    override fun onSetFailure(error: String?) {
+                        Timber.e("Failed to set remote SDP: $error")
+                    }
+                }, remoteSDP)
             }
         }
     }
+
     override suspend fun sendIceCandidates(candidates: List<IceCandidate>, target: String) {
         signalingConnection!!.sendIceCandidates(candidates, target)
     }
@@ -88,13 +103,17 @@ class SignalingServiceImpl(
                     Timber.d("${message.sender} sent ICE Candidates" +
                             "\n${message.candidatesList.joinToString("\n")}")
                     message.candidatesList.forEach { candidate ->
-                        webRTCManager.addIceCandidate(userName,
-                            org.webrtc.IceCandidate(
-                                candidate.sdpMid,
-                                candidate.sdpMLineIndex,
-                                candidate.candidate
-                            )
+                        val tmp = org.webrtc.IceCandidate(
+                            candidate.sdpMid,
+                            (candidate.sdpMLineIndex ?: 0),
+                            candidate.candidate.toString()
                         )
+
+                        webRTCManager.addIceCandidate(message.sender,
+                            tmp
+                        )
+
+                        Timber.d(tmp.toString())
                     }
                 }
             }

@@ -4,5 +4,6 @@ enum class DataModelType {
     Offer,
     Answer,
     IceCandidate,
-    StartCall
+    StartCall,
+    Message
 }
