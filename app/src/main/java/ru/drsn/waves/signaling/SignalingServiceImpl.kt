@@ -14,11 +14,12 @@ import kotlinx.coroutines.launch
 import org.webrtc.SessionDescription
 import ru.drsn.waves.webrtc.SdpObserver
 import ru.drsn.waves.webrtc.WebRTCManager
+import ru.drsn.waves.webrtc.contract.IWebRTCManager
 import timber.log.Timber
 
 class SignalingServiceImpl: SignalingService {
 
-    lateinit var webRTCManager: WebRTCManager
+    lateinit var webRTCManager: IWebRTCManager
 
     private var signalingConnection: SafeSignalingConnection? = null
     private val _usersList = MutableStateFlow<List<User>>(emptyList()) // Внутренний StateFlow
@@ -42,9 +43,6 @@ class SignalingServiceImpl: SignalingService {
             signalingConnection!!.observeUsersList()
                 .onEach { newList ->
                     _usersList.value = newList
-                    newList.forEach {
-                        webRTCManager.getOrCreateConnection(it.name)
-                    }
                 }
                 .launchIn(serviceScope)
 
@@ -65,29 +63,14 @@ class SignalingServiceImpl: SignalingService {
     override fun observeSDP() {
         serviceScope.launch {
             signalingConnection!!.observeSDP().collect { sessionDescription ->
-                Timber.d("received ${sessionDescription.type} from ${sessionDescription.sender}" +
-                        "\n${sessionDescription.sdp}")
-
-                val peerConnection = webRTCManager.getOrCreateConnection(sessionDescription.sender)
-
-                val remoteSDP = SessionDescription(
-                    if (sessionDescription.type == "offer") SessionDescription.Type.OFFER else SessionDescription.Type.ANSWER,
-                    sessionDescription.sdp
-                )
-
-                peerConnection.setRemoteDescription(object : SdpObserver() {
-                    override fun onSetSuccess() {
-                        Timber.d("Remote SDP set successfully for ${sessionDescription.sender}")
-
-                        if (sessionDescription.type == "offer") {
-                            webRTCManager.answer(sessionDescription.sender)
-                        }
-                    }
-
-                    override fun onSetFailure(error: String?) {
-                        Timber.e("Failed to set remote SDP: $error")
-                    }
-                }, remoteSDP)
+                Timber.d(
+                    "received ${sessionDescription.type} from ${sessionDescription.sender}" +
+                            "\n${sessionDescription.sdp}")
+                when (sessionDescription.type.lowercase()) {
+                    "offer" -> webRTCManager.handleRemoteOffer(sessionDescription.sender, sessionDescription.sdp)
+                    "answer" -> webRTCManager.handleRemoteAnswer(sessionDescription.sender, sessionDescription.sdp)
+                    else -> Timber.w("Received unknown SDP type: ${sessionDescription.type}")
+                }
             }
         }
     }
@@ -98,25 +81,20 @@ class SignalingServiceImpl: SignalingService {
 
     override fun observeIceCandidates() {
         serviceScope.launch {
-            signalingConnection!!.observeIceCandidates().collect { message ->
-                if (message.receiver == userName) {
-                    Timber.d("${message.sender} sent ICE Candidates" +
-                            "\n${message.candidatesList.joinToString("\n")}")
-                    message.candidatesList.forEach { candidate ->
-                        val tmp = org.webrtc.IceCandidate(
-                            candidate.sdpMid,
-                            (candidate.sdpMLineIndex ?: 0),
-                            candidate.candidate.toString()
-                        )
-
-                        webRTCManager.addIceCandidate(message.sender,
-                            tmp
-                        )
-
-                        Timber.d(tmp.toString())
+            signalingConnection!!.observeIceCandidates() // Flow<IceCandidatesMessage>
+                .collect { message -> // message - это gRPC.v1.IceCandidatesMessage
+                    // Важно: обрабатываем кандидатов только для себя!
+                    if (message.receiver.equals(userName)) {
+                        Timber.i("Received ${message.candidatesList.size} ICE candidate(s) from ${message.sender}")
+                        message.candidatesList.forEach { grpcCandidate ->
+                            // Передаем каждого кандидата в WebRTCManager
+                            webRTCManager.handleRemoteCandidate(message.sender, grpcCandidate)
+                        }
+                    } else {
+                        // Это сообщение не для нас, игнорируем (или логируем для отладки)
+                        Timber.d("Ignoring ICE candidates message intended for ${message.receiver}")
                     }
                 }
-            }
         }
     }
 }

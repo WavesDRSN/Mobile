@@ -1,178 +1,367 @@
+// WebRTCManager.kt
 package ru.drsn.waves.webrtc
 
 import android.content.Context
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import org.webrtc.DataChannel
-import org.webrtc.IceCandidate
-import org.webrtc.MediaConstraints
-import org.webrtc.PeerConnection
-import org.webrtc.PeerConnectionFactory
-import org.webrtc.SessionDescription
-import ru.drsn.waves.signaling.SignalingService
-import ru.drsn.waves.webrtc.utils.DataModel
-import ru.drsn.waves.webrtc.utils.DataModelType
+import gRPC.v1.IceCandidate as GrpcIceCandidate
+import kotlinx.coroutines.*
+import org.webrtc.*
+import ru.drsn.waves.signaling.SignalingService // Используем интерфейс
+import ru.drsn.waves.webrtc.contract.ISignalingController
+import ru.drsn.waves.webrtc.contract.IWebRTCManager
+import ru.drsn.waves.webrtc.contract.WebRTCListener
 import timber.log.Timber
 import java.nio.ByteBuffer
+import java.nio.charset.Charset
+import java.util.concurrent.ConcurrentHashMap
 
 class WebRTCManager(
-    private val context: Context
-) {
+    private val context: Context // Зависимость от интерфейса сигналинга
+) : IWebRTCManager, ISignalingController { // Реализует оба интерфейса
+
     lateinit var signalingService: SignalingService
-    private val connections = mutableMapOf<String, PeerConnection>()
-    private val dataChannels = mutableMapOf<String, DataChannel>()
-    private val observers = mutableMapOf<String, WebRTCListener>()
-
-
+    private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default) // Scope для управления корутинами менеджера
     private val peerConnectionFactory: PeerConnectionFactory
-    private val iceServer = listOf(
-        PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
-        )
-    private val mediaConstraints = MediaConstraints()
-
-    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
-    var listener: Listener? = null
-
-    init {
-        Timber.d("Initializing WebRTCManager")
-        val options = PeerConnectionFactory.InitializationOptions.builder(context)
-            .setFieldTrials("WebRTC-H264HighProfile/Enabled/")
-            .createInitializationOptions()
-        PeerConnectionFactory.initialize(options)
-
-        peerConnectionFactory = PeerConnectionFactory.builder()
-            .setOptions(PeerConnectionFactory.Options())
-            .createPeerConnectionFactory()
-
-        mediaConstraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
-        mediaConstraints.mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
+    private val iceServers: List<PeerConnection.IceServer> = listOf(
+        PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
+        PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
+        // !!! ВАЖНО: Добавь сюда свои TURN серверы для надежности !!!
+        PeerConnection.IceServer.builder("turn:relay1.expressturn.com:3478")
+           .setUsername("efTXYQK53J3HDFV70T")
+           .setPassword("jk38ahrHzaWa2wv8")
+           .createIceServer()
+    )
+    private val defaultPeerConnectionConstraints = MediaConstraints() // Обычно пустые для DataChannel
+    private val defaultSdpConstraints = MediaConstraints().apply {
+        mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false")) // Мы не ждем аудио
+        mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false")) // Мы не ждем видео
+        // Для DataChannel OfferToReceiveAudio/Video не нужны, но могут помочь совместимости
     }
 
-    fun getOrCreateConnection(target: String): PeerConnection {
-         // Создаём нового слушателя
+    // Используем ConcurrentHashMap для потокобезопасности, т.к. обращение может быть из разных потоков
+    private val peerConnections = ConcurrentHashMap<String, PeerConnection>()
+    private val dataChannels = ConcurrentHashMap<String, DataChannel>()
+    private val dataChannelHandlers = ConcurrentHashMap<String, DataChannelHandler>()
 
+    override var listener: WebRTCListener? = null
 
-        return connections.getOrPut(target) {
-            val observer = WebRTCListener(signalingService, target, dataChannels)
-            observers.put(target, observer)
-            Timber.d("Creating new connection for: $target")
-            peerConnectionFactory.createPeerConnection(iceServer, observer)!!
+    init {
+        Timber.d("Initializing WebRTCManager...")
+        // 1. Инициализация Factory
+        val initOptions = PeerConnectionFactory.InitializationOptions.builder(context)
+            .setEnableInternalTracer(true) // Для отладки
+            .setFieldTrials("WebRTC-H264HighProfile/Enabled/") // Пример field trial
+            .createInitializationOptions()
+        PeerConnectionFactory.initialize(initOptions)
+
+        // 2. Создание Factory
+        val options = PeerConnectionFactory.Options().apply {
+            // disableEncryption = true // Не рекомендуется, только для отладки!
+            // disableNetworkMonitor = true // Может понадобиться в специфичных случаях
+        }
+        val defaultVideoEncoderFactory = DefaultVideoEncoderFactory(null, true, true)
+        val defaultVideoDecoderFactory = DefaultVideoDecoderFactory(null)
+
+        peerConnectionFactory = PeerConnectionFactory.builder()
+            .setOptions(options)
+            // Не нужны для DataChannel-only, но пусть будут:
+            .setVideoEncoderFactory(defaultVideoEncoderFactory)
+            .setVideoDecoderFactory(defaultVideoDecoderFactory)
+            .createPeerConnectionFactory()
+        Timber.d("PeerConnectionFactory created.")
+    }
+
+    // --- Реализация IWebRTCManager ---
+
+    override fun call(target: String) {
+        managerScope.launch {
+            Timber.i("[$target] Initiating call...")
+            val peerConnection = getOrCreatePeerConnection(target)
+
+            // Создаем DataChannel ДО создания Offer
+            createAndRegisterDataChannel(target, peerConnection)
+
+            // Создаем Offer
+            peerConnection.createOffer(object : SdpObserver() {
+                override fun onCreateSuccess(p0: SessionDescription?) {
+                    if (p0 == null) {
+                        Timber.e("[$target] Failed to create offer: SDP is null")
+                        listener?.onError(target, "Failed to create offer: SDP is null")
+                        return
+                    }
+                    Timber.d("[$target] Offer created successfully.")
+                    // Устанавливаем локальное описание
+                    peerConnection.setLocalDescription(object : SdpObserver() {
+                        override fun onSetSuccess() {
+                            Timber.d("[$target] Local description (offer) set successfully.")
+                            // Отправляем Offer через сигналинг
+                            managerScope.launch { sendSdp(target, p0) }
+                        }
+                        override fun onSetFailure(p0: String?) {
+                            Timber.e("[$target] Failed to set local description (offer): $p0")
+                            listener?.onError(target, "Failed to set local offer: $p0")
+                        }
+                    }, p0)
+                }
+                override fun onCreateFailure(p0: String?) {
+                    Timber.e("[$target] Failed to create offer: $p0")
+                    listener?.onError(target, "Failed to create offer: $p0")
+                }
+            }, defaultSdpConstraints) // Используем SDP constraints
         }
     }
 
-    fun getObserver(target: String): WebRTCListener {
-        return observers[target]!!
-    }
+    override fun handleRemoteOffer(sender: String, sdp: String) {
+        managerScope.launch {
+            Timber.i("[$sender] Handling remote offer...")
+            val peerConnection = getOrCreatePeerConnection(sender)
+            val remoteDescription = SessionDescription(SessionDescription.Type.OFFER, sdp)
 
-    private fun createDataChannel(peerConnection: PeerConnection, target: String) {
-        val config = DataChannel.Init()
-        val dataChannel = peerConnection.createDataChannel("chat", config)
-
-        // Устанавливаем обработчик для входящих сообщений
-        dataChannel.registerObserver(object : DataChannel.Observer {
-            override fun onMessage(buffer: DataChannel.Buffer?) {
-                val message = String(buffer?.data?.array() ?: byteArrayOf())
-                Timber.d("Received message from $target: $message")
-                // Здесь можно обработать полученное сообщение
-                // Например, отправить его в UI или сохранить
-            }
-
-            override fun onBufferedAmountChange(amount: Long) {
-                // Можно отслеживать количество буферизированных данных
-            }
-
-            override fun onStateChange() {
-                // Можно отслеживать изменение состояния канала
-            }
-        })
-    }
-
-    // Метод для отправки текстового сообщения через DataChannel
-    fun sendMessage(target: String, username: String, message: String) {
-        val dataChannel = dataChannels[target]
-        val byteBuffer = ByteBuffer.wrap(message.toByteArray())
-        val buffer = DataChannel.Buffer(byteBuffer, false)
-
-        dataChannel?.send(buffer)
-    }
-
-    fun call(target: String) {
-        val peerConnection = getOrCreateConnection(target)
-        peerConnection.createOffer(object : SdpObserver() {
-            override fun onCreateSuccess(sdp: SessionDescription?) {
-                sdp?.let {
-                    Timber.d("SDP offer created for $target")
-                    peerConnection.setLocalDescription(object : SdpObserver() {
-                        override fun onSetSuccess() {
-                            serviceScope.launch {
-                                signalingService.sendSDP("offer", it.description, target)
-                                createDataChannel(peerConnection, target)
-                            }  // Теперь отправляем SDP
-                        }
-
-                        override fun onSetFailure(error: String?) {
-                            Timber.e("Failed to set local SDP: $error")
-                        }
-                    }, it)
-                }
-            }
-
-            override fun onCreateFailure(error: String?) {
-                Timber.e("SDP offer creation failed: $error")
-            }
-        }, mediaConstraints)
-    }
-
-
-    fun answer(target: String) {
-        val peerConnection = getOrCreateConnection(target)
-        peerConnection.createAnswer(object : SdpObserver() {
-            override fun onCreateSuccess(sdp: SessionDescription?) {
-                sdp?.let {
-                    Timber.d("SDP answer created for $target")
-                    peerConnection.setLocalDescription(object : SdpObserver() {
-                        override fun onSetSuccess() {
-                            serviceScope.launch {
-                                signalingService.sendSDP("answer", it.description, target)  // Теперь отправляем SDP
-                                createDataChannel(peerConnection, target)
+            // Устанавливаем удаленное описание
+            peerConnection.setRemoteDescription(object : SdpObserver() {
+                override fun onSetSuccess() {
+                    Timber.d("[$sender] Remote description (offer) set successfully.")
+                    // Создаем Answer
+                    peerConnection.createAnswer(object : SdpObserver() {
+                        override fun onCreateSuccess(p0: SessionDescription?) {
+                            if (p0 == null) {
+                                Timber.e("[$sender] Failed to create answer: SDP is null")
+                                listener?.onError(sender, "Failed to create answer: SDP is null")
+                                return
                             }
+                            Timber.d("[$sender] Answer created successfully.")
+                            // Устанавливаем локальное описание (answer)
+                            peerConnection.setLocalDescription(object : SdpObserver() {
+                                override fun onSetSuccess() {
+                                    Timber.d("[$sender] Local description (answer) set successfully.")
+                                    // Отправляем Answer через сигналинг
+                                    managerScope.launch { sendSdp(sender, p0) }
+                                }
+                                override fun onSetFailure(p0: String?) {
+                                    Timber.e("[$sender] Failed to set local description (answer): $p0")
+                                    listener?.onError(sender, "Failed to set local answer: $p0")
+                                }
+                            }, p0)
                         }
+                        override fun onCreateFailure(p0: String?) {
+                            Timber.e("[$sender] Failed to create answer: $p0")
+                            listener?.onError(sender, "Failed to create answer: $p0")
+                        }
+                    }, defaultSdpConstraints) // Используем те же constraints для Answer
+                }
+                override fun onSetFailure(p0: String?) {
+                    Timber.e("[$sender] Failed to set remote description (offer): $p0")
+                    listener?.onError(sender, "Failed to set remote offer: $p0")
+                }
+            }, remoteDescription)
+        }
+    }
 
-                        override fun onSetFailure(error: String?) {
-                            Timber.e("Failed to set local SDP: $error")
-                        }
-                    }, it)
+    override fun handleRemoteAnswer(sender: String, sdp: String) {
+        managerScope.launch {
+            Timber.i("[$sender] Handling remote answer...")
+            val peerConnection = peerConnections[sender]
+            if (peerConnection == null) {
+                Timber.e("[$sender] Received answer, but no PeerConnection found.")
+                listener?.onError(sender, "Received answer, but no connection exists.")
+                return@launch
+            }
+            val remoteDescription = SessionDescription(SessionDescription.Type.ANSWER, sdp)
+            // Устанавливаем удаленное описание (answer)
+            peerConnection.setRemoteDescription(object : SdpObserver() {
+                override fun onSetSuccess() {
+                    Timber.d("[$sender] Remote description (answer) set successfully.")
+                    // Соединение должно начать устанавливаться (ICE checks)
+                }
+                override fun onSetFailure(p0: String?) {
+                    Timber.e("[$sender] Failed to set remote description (answer): $p0")
+                    listener?.onError(sender, "Failed to set remote answer: $p0")
+                }
+            }, remoteDescription)
+        }
+    }
+
+    override fun handleRemoteCandidate(sender: String, candidate: GrpcIceCandidate) {
+        managerScope.launch { // Можно выполнять на IO, если addIceCandidate блокирует
+            val peerConnection = peerConnections[sender]
+            if (peerConnection == null) {
+                Timber.w("[$sender] Received ICE candidate, but no PeerConnection found (might be late).")
+                // Можно буферизировать кандидатов, если соединение еще не создано
+                return@launch
+            }
+            val iceCandidate = IceCandidate(
+                candidate.sdpMid,
+                candidate.sdpMLineIndex,
+                candidate.candidate
+            )
+            Timber.d("[$sender] Adding remote ICE candidate: ${iceCandidate.sdpMid}")
+            peerConnection.addIceCandidate(iceCandidate)
+        }
+    }
+
+    override fun sendMessage(target: String, message: String) {
+        managerScope.launch(Dispatchers.IO) { // Отправка данных - IO операция
+            val dataChannel = dataChannels[target]
+            if (dataChannel == null) {
+                Timber.e("[$target] Cannot send message: DataChannel not found.")
+                listener?.onError(target, "Cannot send message: DataChannel not found.")
+                return@launch
+            }
+            if (dataChannel.state() != DataChannel.State.OPEN) {
+                Timber.e("[$target] Cannot send message: DataChannel is not open (State: ${dataChannel.state()}).")
+                listener?.onError(target, "Cannot send message: DataChannel is not open.")
+                return@launch
+            }
+
+            val byteBuffer = ByteBuffer.wrap(message.toByteArray())
+            val buffer = DataChannel.Buffer(byteBuffer, false) // false для текстовых данных
+
+            if (dataChannel.send(buffer)) {
+                Timber.d("[$target] Message sent successfully.")
+            } else {
+                Timber.w("[$target] Failed to send message (send returned false).")
+                listener?.onError(target, "Failed to send message (send buffer error).")
+            }
+        }
+    }
+
+    override fun closeConnection(target: String) {
+        managerScope.launch {
+            Timber.w("[$target] Closing connection...")
+            dataChannels[target]?.let {
+                it.unregisterObserver()
+                it.close()
+                Timber.d("[$target] DataChannel closed.")
+            }
+            peerConnections[target]?.let {
+                it.close()
+                Timber.d("[$target] PeerConnection closed.")
+            }
+            // Удаляем из карт
+            dataChannels.remove(target)
+            dataChannelHandlers.remove(target)
+            peerConnections.remove(target)
+            Timber.w("[$target] Connection resources released.")
+        }
+    }
+
+    override fun closeAllConnections() {
+        Timber.w("Closing all connections...")
+        // Создаем копию ключей, чтобы избежать ConcurrentModificationException
+        val targets = peerConnections.keys.toList()
+        targets.forEach { closeConnection(it) }
+        // Можно также остановить Factory, если менеджер уничтожается
+        // peerConnectionFactory.dispose()
+        // PeerConnectionFactory.shutdownInternalTracer()
+        managerScope.cancel() // Отменяем все корутины менеджера
+        Timber.w("All connections closed and manager scope cancelled.")
+    }
+
+    // --- Реализация ISignalingController ---
+
+    override suspend fun sendSdp(target: String, sessionDescription: SessionDescription) {
+        Timber.d("[$target] Sending SDP (${sessionDescription.type})...")
+        try {
+            signalingService.sendSDP(
+                type = sessionDescription.type.toString().lowercase(), // "offer" или "answer"
+                sdp = sessionDescription.description,
+                target = target
+            )
+            Timber.i("[$target] SDP (${sessionDescription.type}) sent via SignalingService.")
+        } catch (e: Exception) {
+            Timber.e(e, "[$target] Failed to send SDP (${sessionDescription.type})")
+            listener?.onError(target, "Failed to send SDP: ${e.message}")
+        }
+    }
+
+    override suspend fun sendCandidates(target: String, candidates: List<IceCandidate>) {
+        if (candidates.isEmpty()) return // Не отправляем пустой список
+
+        Timber.d("[$target] Sending ${candidates.size} ICE candidate(s)...")
+        try {
+            // Конвертируем в gRPC формат
+            val grpcCandidates = candidates.map { ice ->
+                GrpcIceCandidate.newBuilder()
+                    .setSdpMid(ice.sdpMid ?: "")
+                    .setSdpMLineIndex(ice.sdpMLineIndex)
+                    .setCandidate(ice.sdp)
+                    .build()
+            }
+            Timber.d(grpcCandidates.toString())
+            signalingService.sendIceCandidates(grpcCandidates, target)
+            Timber.i("[$target] ${grpcCandidates.size} ICE candidate(s) sent via SignalingService.")
+        } catch (e: Exception) {
+            Timber.e(e, "[$target] Failed to send ICE candidates")
+            listener?.onError(target, "Failed to send ICE candidates: ${e.message}")
+        }
+    }
+
+    // --- Приватные хелперы ---
+
+    private fun getOrCreatePeerConnection(target: String): PeerConnection {
+        // synchronized нужен, если этот метод может вызываться конкурентно до добавления в map
+        return peerConnections[target] ?: synchronized(this) {
+            peerConnections[target] ?: run { // Double-checked locking
+                Timber.d("[$target] Creating new PeerConnection.")
+                val observer = PeerConnectionHandler(
+                    target = target,
+                    signalingController = this, // WebRTCManager сам реализует ISignalingController
+                    webRTCListener = listener,
+                    onDataChannelAvailable = { dataChannel -> // Лямбда для обработки входящего канала
+                        Timber.d("[$target] Handling incoming DataChannel from PeerConnectionHandler.")
+                        registerDataChannel(target, dataChannel)
+                    }
+                )
+                val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
+                    // iceTransportPolicy = PeerConnection.IceTransportsType.RELAY // Только через TURN (для тестов)
+                    sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN // Стандарт де-факто
+                    continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
+                    // keyType = PeerConnection.KeyType.ECDSA // Алгоритм DTLS
+                }
+                val connection = peerConnectionFactory.createPeerConnection(rtcConfig, observer)
+                if (connection == null) {
+                    Timber.e("[$target] Failed to create PeerConnection (factory returned null).")
+                    throw RuntimeException("PeerConnectionFactory returned null for target $target")
+                } else {
+                    Timber.i("[$target] PeerConnection created successfully.")
+                    peerConnections[target] = connection // Сохраняем
+                    connection
                 }
             }
-
-            override fun onCreateFailure(error: String?) {
-                Timber.e("SDP answer creation failed: $error")
-            }
-        }, mediaConstraints)
+        }
     }
 
-    fun onRemoteSessionReceived(target: String, sessionDescription: SessionDescription) {
-        val peerConnection = getOrCreateConnection(target)
-        peerConnection.setRemoteDescription(SdpObserver(), sessionDescription)
+    // Создает локальный DataChannel
+    private fun createAndRegisterDataChannel(target: String, peerConnection: PeerConnection): DataChannel? {
+        Timber.d("[$target] Creating local DataChannel 'chat'.")
+        val init = DataChannel.Init().apply {
+            ordered = true // Для чата важен порядок сообщений
+            maxRetransmits = -1 // По умолчанию для надежной доставки
+            negotiated = false // Мы не согласовывали ID заранее
+            id = -1 // Пусть WebRTC сам назначит ID
+        }
+        val dataChannel = peerConnection.createDataChannel("chat", init)
+        if (dataChannel == null) {
+            Timber.e("[$target] Failed to create local DataChannel (createDataChannel returned null).")
+            listener?.onError(target, "Failed to create local DataChannel.")
+            return null
+        } else {
+            Timber.i("[$target] Local DataChannel 'chat' created. State: ${dataChannel.state()}")
+            registerDataChannel(target, dataChannel)
+            return dataChannel
+        }
     }
 
-    fun addIceCandidate(target: String, iceCandidate: IceCandidate?) {
-        val peerConnection = getOrCreateConnection(target)
-        Timber.d("Adding ICE candidate for $target")
-        peerConnection.addIceCandidate(iceCandidate)
-
-    }
-
-    fun closeConnection(target: String) {
-        connections[target]?.close()
-        connections.remove(target)
-        Timber.d("Connection closed for $target")
-    }
-
-    interface Listener {
-        fun onTransferDataToOtherPeer(data: DataModel)
+    // Регистрирует обработчик для любого (локального или удаленного) DataChannel
+    private fun registerDataChannel(target: String, dataChannel: DataChannel) {
+        Timber.d("[$target] Registering DataChannelHandler for label '${dataChannel.label()}'.")
+        val handler = DataChannelHandler(target, listener, dataChannel)
+        dataChannel.registerObserver(handler)
+        dataChannels[target] = dataChannel // Сохраняем канал
+        dataChannelHandlers[target] = handler // Сохраняем его обработчик (если нужно)
+        // Проверим состояние, если канал пришел от удаленного пира, он может быть уже OPEN
+        Timber.d("[$target] DataChannel state after registration: ${dataChannel.state()}")
+        if (dataChannel.state() == DataChannel.State.OPEN) {
+            // Можно уведомить листенер, что канал готов
+        }
     }
 }

@@ -11,6 +11,7 @@ import org.webrtc.DataChannel
 import ru.drsn.waves.signaling.SignalingServiceImpl
 import ru.drsn.waves.webrtc.SdpObserver
 import ru.drsn.waves.webrtc.WebRTCManager
+import ru.drsn.waves.webrtc.contract.IWebRTCManager
 import ru.drsn.waves.webrtc.utils.DataModelType
 import timber.log.Timber
 import java.nio.ByteBuffer
@@ -18,7 +19,7 @@ import kotlin.random.Random
 
 class WebRTCActivity : AppCompatActivity() {
     private lateinit var signalingService: SignalingServiceImpl
-    private lateinit var webRTCManager: WebRTCManager
+    private lateinit var webRTCManager: IWebRTCManager
     private lateinit var username: String
     private lateinit var targetUser: String
 
@@ -77,6 +78,6 @@ class WebRTCActivity : AppCompatActivity() {
     }
 
     private fun sendMessage(target: String, message: String) {
-        webRTCManager.sendMessage(target, username, message)
+        webRTCManager.sendMessage(target, message)
     }
 }
