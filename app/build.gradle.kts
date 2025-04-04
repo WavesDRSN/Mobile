@@ -75,6 +75,9 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
+    //webrtc
+    implementation(libs.stream.webrtc.android)
 }
 
 
