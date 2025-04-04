@@ -14,6 +14,7 @@ kotlinxCoroutinesCore = "1.7.3"
 material = "1.12.0"
 grpc = "1.64.0"
 grpc-kotlin = "1.4.1"
+streamWebrtcAndroid = "1.3.8"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -34,6 +35,7 @@ protoc-gen-grpc-java = { module = "io.grpc:protoc-gen-grpc-java", version.ref = 
 protoc-gen-grpc-kotlin = { module = "io.grpc:protoc-gen-grpc-kotlin", version.ref = "grpc-kotlin" }
 protobuf-kotlin-lite = {module = "com.google.protobuf:protobuf-kotlin-lite", version="4.30.0"}
 timber = {module = "com.jakewharton.timber:timber", version = "5.0.1"}
+stream-webrtc-android = { module = "io.getstream:stream-webrtc-android", version.ref = "streamWebrtcAndroid" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

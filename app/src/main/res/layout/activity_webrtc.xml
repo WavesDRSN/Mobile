@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <EditText
+            android:id="@+id/editTextTarget"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Имя пользователя" />
+
+        <Button
+            android:id="@+id/btnConnectServer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Подключиться к серверу" />
+
+        <Button
+            android:id="@+id/btnRequestConnection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Запросить подключение" />
+
+        <EditText
+            android:id="@+id/editTextMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Сообщение" />
+
+        <Button
+            android:id="@+id/btnSendMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Отправить сообщение" />
+
+    </LinearLayout>
+
+
+</androidx.constraintlayout.widget.ConstraintLayout>
