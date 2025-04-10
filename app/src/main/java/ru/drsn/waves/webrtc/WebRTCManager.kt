@@ -70,6 +70,8 @@ class WebRTCManager(
         Timber.d("PeerConnectionFactory created.")
     }
 
+    override fun getDataHandler(target: String): DataChannelHandler? {return dataChannelHandlers[target]}
+
     // --- Реализация IWebRTCManager ---
 
     override fun call(target: String) {

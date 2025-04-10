@@ -3,7 +3,6 @@ package ru.drsn.waves
 import android.app.Application
 import ru.drsn.waves.signaling.SignalingServiceImpl
 import ru.drsn.waves.webrtc.WebRTCManager
-import ru.drsn.waves.webrtc.contract.IWebRTCManager
 import timber.log.Timber
 
 class WavesApplication : Application() {

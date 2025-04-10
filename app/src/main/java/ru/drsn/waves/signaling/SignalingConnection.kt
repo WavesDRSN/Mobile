@@ -114,6 +114,8 @@ class SignalingConnection(
         val intervalMillis = initialResponse.userKeepAliveInterval.seconds * 1000
         isConnected.set(true)
 
+        userKey = initialResponse.userKey
+
         sendICEInitialConnect()
         sendSDPInitialConnect()
 

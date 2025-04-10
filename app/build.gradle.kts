@@ -39,6 +39,7 @@ android {
         jvmTarget = "21"
     }
     buildFeatures {
+        viewBinding = true
         buildConfig = true
     }
     buildTypes {

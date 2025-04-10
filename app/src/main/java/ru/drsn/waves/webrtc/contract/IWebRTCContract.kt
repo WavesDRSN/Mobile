@@ -4,8 +4,10 @@ import gRPC.v1.IceCandidate as GrpcIceCandidate // Даем псевдоним �
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
+import ru.drsn.waves.webrtc.DataChannelHandler
 
 interface IWebRTCManager {
+    fun getDataHandler(target: String) : DataChannelHandler?
     fun call(target: String)
     fun handleRemoteOffer(sender: String, sdp: String)
     fun handleRemoteAnswer(sender: String, sdp: String)
@@ -28,4 +30,5 @@ interface WebRTCListener {
     fun onConnectionStateChanged(target: String, state: PeerConnection.IceConnectionState)
     fun onMessageReceived(sender: String, message: String)
     fun onError(target: String?, error: String) // target может быть null для общих ошибок
+    fun onDataChannelOpen(target: String)
 }

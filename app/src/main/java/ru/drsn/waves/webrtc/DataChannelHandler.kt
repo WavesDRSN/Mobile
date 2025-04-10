@@ -8,9 +8,11 @@ import java.nio.charset.Charset
 // Обработчик событий одного DataChannel
 class DataChannelHandler(
     private val target: String,
-    private val webRTCListener: WebRTCListener?,
+    private var webRTCListener: WebRTCListener?,
     private val dataChannel: DataChannel
 ) : DataChannel.Observer {
+
+    fun changeListener(listener: WebRTCListener) {webRTCListener = listener}
 
     override fun onBufferedAmountChange(previousAmount: Long) {
         Timber.d("[$target] DataChannel buffered amount changed: $previousAmount")
@@ -22,6 +24,7 @@ class DataChannelHandler(
         // val state = // как получить состояние из observer? Нужно брать у самого DataChannel
         Timber.d("[$target] DataChannel state changed to ${dataChannel.state()}.")
         // Можно уведомлять webRTCListener?.onDataChannelStateChanged(target, newState)
+        webRTCListener?.onDataChannelOpen(target)
     }
 
     override fun onMessage(buffer: DataChannel.Buffer) {
