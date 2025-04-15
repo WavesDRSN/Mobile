@@ -2,7 +2,7 @@
 package ru.drsn.waves.webrtc
 
 import android.content.Context
-import gRPC.v1.IceCandidate as GrpcIceCandidate
+import gRPC.v1.Signaling.IceCandidate as GrpcIceCandidate
 import kotlinx.coroutines.*
 import org.webrtc.*
 import ru.drsn.waves.signaling.SignalingService // Используем интерфейс

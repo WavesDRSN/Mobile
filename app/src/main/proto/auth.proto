@@ -5,7 +5,7 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 
 option java_multiple_files = true;
-option java_package = "gRPC.v1";
+option java_package = "gRPC.v1.Authentication";
 option java_outer_classname = "AuthorisationProto";
 
 service Authorisation {

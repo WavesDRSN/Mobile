@@ -1,7 +1,7 @@
 package ru.drsn.waves.signaling
 
 import com.google.protobuf.Timestamp
-import gRPC.v1.*
+import gRPC.v1.Signaling.*
 import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import kotlinx.coroutines.CoroutineScope

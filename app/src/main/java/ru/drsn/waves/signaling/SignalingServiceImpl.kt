@@ -1,19 +1,14 @@
 package ru.drsn.waves.signaling
 
-import gRPC.v1.IceCandidate
-import gRPC.v1.User
+import gRPC.v1.Signaling.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import org.webrtc.SessionDescription
-import ru.drsn.waves.webrtc.SdpObserver
-import ru.drsn.waves.webrtc.WebRTCManager
 import ru.drsn.waves.webrtc.contract.IWebRTCManager
 import timber.log.Timber
 

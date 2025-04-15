@@ -1,6 +1,6 @@
 package ru.drsn.waves.webrtc.contract
 
-import gRPC.v1.IceCandidate as GrpcIceCandidate // Даем псевдоним во избежание конфликта имен
+import gRPC.v1.Signaling.IceCandidate as GrpcIceCandidate // Даем псевдоним во избежание конфликта имен
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
