@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option java_multiple_files = true;
+option java_package = "gRPC.v1";
+option java_outer_classname = "AuthorisationProto";
+
+service Authorisation {
+
+  /*
+  Все функции не создают никаких потоков, строгая система, запрос -> ответ.
+  Сервер ВСЕГДА отдает только ОТВЕТ, Клиент - только ЗАПРОС
+  */
+
+  rpc ReserveNickname (ReserveNicknameRequest) returns (ReserveNicknameResponse);
+
+  rpc Register (RegisterRequest) returns (RegisterResponse);
+
+  rpc RequestChallenge (ChallengeRequest) returns (ChallengeResponse);
+
+  rpc Authentication (AuthenticationRequest) returns (AuthenticationResponse);
+}
+
+
+/* Сообщение для бронирования никнейма. Вызывается перед генерацией ключей. */
+message ReserveNicknameRequest {
+  string nickname = 1; // Сам никнейм
+}
+
+/* Ответ на запрос бронирования никнейма. */
+message ReserveNicknameResponse {
+  string reservation_token = 1; // Некоторый уникальный токен, ассоциированный с ником. Например UUID
+  int64 expires_at_unix = 2; // Время истечения брони. Если до этого времени не зарегистрироваться, ник отпускается
+}
+
+/* Запрос на регистрацию пользователя. Отправляется уже после генерации ключей. */
+message RegisterRequest {
+  string reservation_token = 1; // Вместо ника при регистрации указывается ранее полученный при резервации токен.
+  bytes public_key = 2; // Публичный ключ в формате X.509 SPKI DER.
+}
+
+/* Ответ на попытку регистрации */
+message RegisterResponse {
+  bool success = 1; // Успешность операции
+  string error_message = 2; // Сообщение ошибки. Пустое, если регистрация прошла успешно
+}
+
+/* Запросить у сервера челлендж на имя username. Вызывается первым при попытке авторизации */
+message ChallengeRequest {
+  string username = 1;
+}
+
+/* Ответ от сервера, выдающийся Challenge */
+message ChallengeResponse {
+  string challenge_id = 1; // id челленджа. Будет отправляться в будущем для сопоставления подписи с челленджем.
+  bytes challenge = 2;  // Сам челлендж. Подписывается приватным ключом.
+}
+
+/* Запрос авторизации. Вызывается после подписи челленджа. */
+message AuthenticationRequest {
+  string username = 1; // Имя. Не токен, непосредственно имя.
+  string challenge_id = 2; // ID челленджа, для безопасности передается только id.
+  bytes signature = 3; // Непосредственно подписанный челлендж. Условный пароль.
+}
+
+/* Ответ на авторизацию. По сути совпадает с логикой при ответе на запрос регистрации. */
+message AuthenticationResponse {
+  bool success = 1;
+  string error_message = 2;
+  string token = 3; // возможно, в будущем будет убран. здесь можно передавать например JWT, который позволит пользователю общаться с сервером.
+  // JWT - хороший подход для использования спринг секьюрити, можно будет удобно закрыть все сервисы за ним.
+}
