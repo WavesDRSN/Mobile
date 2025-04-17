@@ -5,14 +5,10 @@ import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import ru.drsn.waves.BuildConfig
 import gRPC.v1.Authentication.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 
 class AuthenticationClient (
     serverAddress: String,
-    serverPort: Int,
-    private val username: String
+    serverPort: Int
 ) {
     private val channel: ManagedChannel = ManagedChannelBuilder
         .forAddress(serverAddress, serverPort)
