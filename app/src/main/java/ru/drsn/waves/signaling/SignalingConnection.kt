@@ -38,7 +38,7 @@ class SignalingConnection(
         UserConnectionGrpcKt.UserConnectionCoroutineStub(channel)
 
     private val _usersListFlow = MutableStateFlow<List<User>>(emptyList())
-    val usersListStateFlow: StateFlow<List<User>> = _usersListFlow.asStateFlow()
+    private val usersListStateFlow: StateFlow<List<User>> = _usersListFlow.asStateFlow()
 
     private val isConnected = AtomicBoolean(false)
 
@@ -48,7 +48,7 @@ class SignalingConnection(
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private val SDPFlow = MutableSharedFlow<SDPExchange>()
+    private val sdpFlow = MutableSharedFlow<SDPExchange>()
     private val outgoingSDPFlow = MutableSharedFlow<SessionDescription>()
     private val iceCandidatesFlow = MutableSharedFlow<ICEExchange>(extraBufferCapacity = 10)
     private val outgoingIceCandidatesFlow = MutableSharedFlow<IceCandidatesMessage>(extraBufferCapacity = 10)
@@ -126,8 +126,8 @@ class SignalingConnection(
     * Логика: обновляет свою переменную списка, присваивая каждый раз новую ссылку.
     * */
     private suspend fun handleUsersList(usersList: UsersList) {
-        val users = usersList.usersList;
-        _usersListFlow.emit(users);
+        val users = usersList.usersList
+        _usersListFlow.emit(users)
         Timber.i("Active users: ${users.joinToString { it.name }}")
     }
 
@@ -155,7 +155,7 @@ class SignalingConnection(
 
     private fun listenForSDP() {
         coroutineScope.launch {
-            stub.exchangeSDP(SDPFlow)
+            stub.exchangeSDP(sdpFlow)
                 .collect{ sdpExchangeMessage ->
                     if (sdpExchangeMessage.hasInitialResponse()) {
                         if (sdpExchangeMessage.initialResponse.approved) sdpInstalled.set(true)
@@ -181,7 +181,7 @@ class SignalingConnection(
                     .build()
             ).build()
 
-            SDPFlow.emit(request)
+            sdpFlow.emit(request)
 
             Timber.d("Sent SDP $type to $target")
         }
@@ -220,7 +220,7 @@ class SignalingConnection(
         }
     }
 
-    suspend fun sendSDPInitialConnect() {
+    private suspend fun sendSDPInitialConnect() {
         val message = SDPExchange.newBuilder()
             .setInitialRequest(
                 SDPStreamInitialRequest.newBuilder()
@@ -231,10 +231,10 @@ class SignalingConnection(
 
         Timber.d("sent sdp init message")
 
-        SDPFlow.emit(message)
+        sdpFlow.emit(message)
     }
 
-    suspend fun sendICEInitialConnect() {
+    private suspend fun sendICEInitialConnect() {
         val message = ICEExchange.newBuilder()
             .setInitialRequest(
                 ICEStreamInitialRequest.newBuilder()

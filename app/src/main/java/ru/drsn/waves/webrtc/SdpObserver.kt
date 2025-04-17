@@ -1,6 +1,6 @@
 package ru.drsn.waves.webrtc
 
-import org.webrtc.SdpObserver;
+import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 
 open class SdpObserver : SdpObserver  {

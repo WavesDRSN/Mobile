@@ -11,7 +11,6 @@ import ru.drsn.waves.webrtc.contract.IWebRTCManager
 import ru.drsn.waves.webrtc.contract.WebRTCListener
 import timber.log.Timber
 import java.nio.ByteBuffer
-import java.nio.charset.Charset
 import java.util.concurrent.ConcurrentHashMap
 
 class WebRTCManager(

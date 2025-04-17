@@ -3,7 +3,6 @@ package ru.drsn.waves.webrtc
 import org.webrtc.DataChannel
 import ru.drsn.waves.webrtc.contract.WebRTCListener
 import timber.log.Timber
-import java.nio.charset.Charset
 
 // Обработчик событий одного DataChannel
 class DataChannelHandler(

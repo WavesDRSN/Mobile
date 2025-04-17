@@ -7,7 +7,6 @@ import org.webrtc.*
 import ru.drsn.waves.webrtc.contract.ISignalingController
 import ru.drsn.waves.webrtc.contract.WebRTCListener
 import timber.log.Timber
-import java.nio.ByteBuffer
 
 // Обработчик событий одного PeerConnection
 class PeerConnectionHandler(
