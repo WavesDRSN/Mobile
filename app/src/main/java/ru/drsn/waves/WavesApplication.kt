@@ -2,6 +2,7 @@ package ru.drsn.waves
 
 import android.app.Application
 import ru.drsn.waves.signaling.SignalingServiceImpl
+import ru.drsn.waves.webrtc.MeshOrchestrator
 import ru.drsn.waves.webrtc.WebRTCManager
 import timber.log.Timber
 
@@ -11,7 +12,9 @@ class WavesApplication : Application() {
         private set
 
     lateinit var webRTCManager: WebRTCManager
-        private set
+
+//    lateinit var meshOrchestrator: MeshOrchestrator
+
 
 
     override fun onCreate() {

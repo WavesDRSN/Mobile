@@ -1,5 +1,6 @@
 package ru.drsn.waves.webrtc.contract
 
+import org.webrtc.DataChannel
 import gRPC.v1.IceCandidate as GrpcIceCandidate // Даем псевдоним во избежание конфликта имен
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
@@ -15,8 +16,11 @@ interface IWebRTCManager {
     fun sendMessage(target: String, message: String)
     fun closeConnection(target: String)
     fun closeAllConnections()
+    fun getConnectedPeers(): Set<String>
     // Listener для событий, идущих "наверх" (в UI/ViewModel)
     var listener: WebRTCListener?
+    var username : String
+    var userslist : List<String>
 }
 
 interface ISignalingController {
@@ -31,4 +35,5 @@ interface WebRTCListener {
     fun onMessageReceived(sender: String, message: String)
     fun onError(target: String?, error: String) // target может быть null для общих ошибок
     fun onDataChannelOpen(target: String)
+    fun onDataChannelStateChanged(target: String, newState: DataChannel.State)
 }

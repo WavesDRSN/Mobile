@@ -27,7 +27,7 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".ui.chat.ChatActivity"
+        <activity android:name=".ui.chat.GroupChatActivity"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar">
         </activity>
 

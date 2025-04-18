@@ -21,7 +21,7 @@ import java.util.Date
 import java.util.UUID
 
 // Реализуем интерфейс WebRTCListener
-class ChatActivity : AppCompatActivity(), WebRTCListener {
+class GroupChatActivity : AppCompatActivity(), WebRTCListener {
 
     private lateinit var binding: ActivityChatBinding
     private lateinit var chatAdapter: ChatAdapter
@@ -34,7 +34,7 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
     private lateinit var recipientName: String
 
     // Логгирование
-    private val TAG = "ChatActivity"
+    private val TAG = "GroupChatActivity"
 
     companion object {
         private const val EXTRA_RECIPIENT_ID = "recipient_id"
@@ -42,7 +42,7 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
         private const val EXTRA_CURRENT_USER_ID = "current_user_id" // Рекомендуется передавать ID
 
         fun newIntent(context: Context, recipientId: String, recipientName: String, currentUserId: String): Intent {
-            return Intent(context, ChatActivity::class.java).apply {
+            return Intent(context, GroupChatActivity::class.java).apply {
                 putExtra(EXTRA_RECIPIENT_ID, recipientId)
                 putExtra(EXTRA_RECIPIENT_NAME, recipientName)
                 putExtra(EXTRA_CURRENT_USER_ID, currentUserId) // Передаем ID текущего пользователя
@@ -62,6 +62,7 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
             finish() // Закрываем активити, если нет ID собеседника
             return // Выходим из onCreate
         }
+
         recipientName = intent.getStringExtra(EXTRA_RECIPIENT_NAME) ?: "Собеседник"
         currentUserId = intent.getStringExtra(EXTRA_CURRENT_USER_ID) ?: run {
             Timber.tag(TAG).e("Current User ID not provided in Intent! Using default.")
@@ -73,7 +74,9 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
         // Пример:
         webRTCManager = (application as WavesApplication).webRTCManager // !!! ЗАМЕНИТЕ YourApp.webRTCManager на ваш способ получения !!!
 
-        webRTCManager.getDataHandler(recipientUserId)?.changeListener(this)
+        webRTCManager.getConnectedPeers().forEach { peerId ->
+            webRTCManager.getDataHandler(peerId)?.changeListener(this)
+        }
 
         setupToolbar()
         setupRecyclerView()
@@ -84,7 +87,7 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
     override fun onStart() {
         super.onStart()
         // Регистрируем эту Activity как слушателя событий WebRTC
-        Timber.tag(TAG).d("Registering WebRTC listener for target: $recipientUserId")
+        Timber.tag(TAG).d("Registering WebRTC listener for target")
         webRTCManager.listener = this
     }
 
@@ -103,7 +106,7 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
     private fun setupToolbar() {
         setSupportActionBar(binding.toolbarChat)
         supportActionBar?.apply {
-            title = recipientName
+            title = "Групповой чат"
             // subtitle = "Offline" // Начальное состояние
             setDisplayHomeAsUpEnabled(true)
             setDisplayShowHomeEnabled(true)
@@ -123,7 +126,7 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
         chatAdapter = ChatAdapter(currentUserId)
         binding.recyclerViewMessages.apply {
             adapter = chatAdapter
-            layoutManager = LinearLayoutManager(this@ChatActivity).apply {
+            layoutManager = LinearLayoutManager(this@GroupChatActivity).apply {
                 stackFromEnd = true // Новые сообщения будут внизу
             }
         }
@@ -136,6 +139,16 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
                 sendMessage(messageText)
                 binding.editTextMessageInput.text.clear()
             }
+        }
+    }
+
+    override fun onDataChannelStateChanged(target: String, newState: DataChannel.State) {
+        // Проверяем, что канал открыт (OPEN)
+        if (newState == DataChannel.State.OPEN) {
+            Timber.tag(TAG).d("DataChannel is OPEN for $target")
+            // Канал открыт, можно отправлять сообщение
+        } else {
+            Timber.tag(TAG).e("DataChannel is not open for $target, state: $newState")
         }
     }
 
@@ -152,12 +165,16 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
         // Получаем всех подключённых пользователей
         val connectedPeers = webRTCManager.getConnectedPeers()
 
-        // Рассылаем сообщение каждому
+        // Проверяем состояние канала для каждого подключенного пира
         connectedPeers.forEach { peerId ->
-            Timber.tag(TAG).d("Sending message to $peerId via WebRTC: $text")
-            webRTCManager.sendMessage(peerId, text)
+            val dataChannel = webRTCManager.getDataHandler(peerId)
+            if (dataChannel != null) {
+                Timber.tag(TAG).d("Sending message to $peerId via WebRTC: $text")
+                webRTCManager.sendMessage(peerId, text)
+            } else {
+                Timber.tag(TAG).e("Cannot send message to $peerId: DataChannel is not open")
+            }
         }
-
         // Можно сохранить сообщение в базу, если нужно
     }
 
@@ -175,24 +192,19 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
     // --- Реализация методов WebRTCListener ---
 
     override fun onConnectionStateChanged(target: String, state: PeerConnection.IceConnectionState) {
-        // Проверяем, относится ли изменение состояния к текущему собеседнику
-        if (target == recipientUserId) {
-            Timber.tag(TAG).i("Connection state for $target changed: $state")
-            // Обновляем UI в главном потоке
-            runOnUiThread {
-                // Пример обновления подзаголовка в Toolbar
-                supportActionBar?.subtitle = when(state) {
-                    PeerConnection.IceConnectionState.CHECKING -> "Проверка..."
-                    PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> "Соединено"
-                    PeerConnection.IceConnectionState.DISCONNECTED -> "Отключено"
-                    PeerConnection.IceConnectionState.FAILED -> "Ошибка соединения"
-                    PeerConnection.IceConnectionState.CLOSED -> "Закрыто"
-                    PeerConnection.IceConnectionState.NEW -> "Новое"
-                    else -> "Статус неизвестен"
-                }
+        Timber.tag(TAG).i("Connection state for $target changed: $state")
+        // Обновляем UI в главном потоке
+        runOnUiThread {
+            // Пример обновления подзаголовка в Toolbar
+            supportActionBar?.subtitle = when(state) {
+                PeerConnection.IceConnectionState.CHECKING -> "Проверка..."
+                PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> "Соединено"
+                PeerConnection.IceConnectionState.DISCONNECTED -> "Отключено"
+                PeerConnection.IceConnectionState.FAILED -> "Ошибка соединения"
+                PeerConnection.IceConnectionState.CLOSED -> "Закрыто"
+                PeerConnection.IceConnectionState.NEW -> "Новое"
+                else -> "Статус неизвестен"
             }
-        } else {
-            Timber.tag(TAG).d("Ignoring connection state change for different target: $target")
         }
     }
 
@@ -202,6 +214,7 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
 
         runOnUiThread {
             Timber.tag(TAG).d("Displaying message from $sender on Main Thread")
+
             val receivedMessage = Message(
                 id = UUID.randomUUID().toString(),
                 text = message,
@@ -209,14 +222,13 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
                 timestamp = Date().time
             )
 
-            // Если это активный чат — просто отображаем
-            if (sender == recipientUserId) {
-                chatAdapter.addMessage(receivedMessage)
-                binding.recyclerViewMessages.scrollToPosition(chatAdapter.itemCount - 1)
-            } else {
-                // 👇 Ты можешь: либо отображать его в другом фрагменте/чате, либо показать уведомление
-                Timber.tag(TAG).w("Message received from other peer ($sender), not active chat ($recipientUserId)")
-                // chatCache.saveMessageForLater(sender, receivedMessage)
+            // Добавляем сообщение в адаптер
+            val lastPosition = chatAdapter.itemCount // Получаем текущую позицию последнего сообщения
+            chatAdapter.addMessage(receivedMessage)
+
+            // Прокручиваем, если добавлено новое сообщение в конец списка
+            if (lastPosition == chatAdapter.itemCount - 1) {
+                binding.recyclerViewMessages.scrollToPosition(lastPosition)
             }
         }
     }
@@ -224,7 +236,7 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
 
     override fun onError(target: String?, error: String) {
         // Проверяем, относится ли ошибка к текущему чату или она общая
-        if (target == null || target == recipientUserId) {
+        if (target == null) {
             Timber.tag(TAG).e("WebRTC Error (target: $target): $error")
             // Показать ошибку пользователю (например, через Snackbar или Toast)
             runOnUiThread {
@@ -240,12 +252,6 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
 
     override fun onDataChannelOpen(target: String) {
         Timber.d("something really hoes wrong")
-    }
-
-    override fun onDataChannelStateChanged(
-        target: String,
-        newState: DataChannel.State
-    ) {
-        TODO("Not yet implemented")
+        webRTCManager.getDataHandler(target)?.changeListener(this)
     }
 }

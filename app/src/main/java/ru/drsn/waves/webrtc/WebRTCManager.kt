@@ -2,9 +2,11 @@
 package ru.drsn.waves.webrtc
 
 import android.content.Context
+import gRPC.v1.user
 import gRPC.v1.IceCandidate as GrpcIceCandidate
 import kotlinx.coroutines.*
 import org.webrtc.*
+import org.webrtc.PeerConnection.SignalingState
 import ru.drsn.waves.signaling.SignalingService // Используем интерфейс
 import ru.drsn.waves.webrtc.contract.ISignalingController
 import ru.drsn.waves.webrtc.contract.IWebRTCManager
@@ -26,9 +28,9 @@ class WebRTCManager(
         PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
         // !!! ВАЖНО: Добавь сюда свои TURN серверы для надежности !!!
         PeerConnection.IceServer.builder("turn:relay1.expressturn.com:3478")
-           .setUsername("efTXYQK53J3HDFV70T")
-           .setPassword("jk38ahrHzaWa2wv8")
-           .createIceServer()
+            .setUsername("efTXYQK53J3HDFV70T")
+            .setPassword("jk38ahrHzaWa2wv8")
+            .createIceServer()
     )
     private val defaultPeerConnectionConstraints = MediaConstraints() // Обычно пустые для DataChannel
     private val defaultSdpConstraints = MediaConstraints().apply {
@@ -43,6 +45,10 @@ class WebRTCManager(
     private val dataChannelHandlers = ConcurrentHashMap<String, DataChannelHandler>()
 
     override var listener: WebRTCListener? = null
+
+    override var username = ""
+    override var userslist = listOf("")
+
 
     init {
         Timber.d("Initializing WebRTCManager...")
@@ -70,7 +76,12 @@ class WebRTCManager(
         Timber.d("PeerConnectionFactory created.")
     }
 
+
     override fun getDataHandler(target: String): DataChannelHandler? {return dataChannelHandlers[target]}
+
+    override fun getConnectedPeers(): Set<String> {
+        return peerConnections.keys // или другая структура, где ты хранишь ID peer'ов
+    }
 
     // --- Реализация IWebRTCManager ---
 
@@ -98,12 +109,14 @@ class WebRTCManager(
                             // Отправляем Offer через сигналинг
                             managerScope.launch { sendSdp(target, p0) }
                         }
+
                         override fun onSetFailure(p0: String?) {
                             Timber.e("[$target] Failed to set local description (offer): $p0")
                             listener?.onError(target, "Failed to set local offer: $p0")
                         }
                     }, p0)
                 }
+
                 override fun onCreateFailure(p0: String?) {
                     Timber.e("[$target] Failed to create offer: $p0")
                     listener?.onError(target, "Failed to create offer: $p0")
@@ -114,10 +127,16 @@ class WebRTCManager(
 
     override fun handleRemoteOffer(sender: String, sdp: String) {
         managerScope.launch {
+
             Timber.i("[$sender] Handling remote offer...")
             val peerConnection = getOrCreatePeerConnection(sender)
+
             val remoteDescription = SessionDescription(SessionDescription.Type.OFFER, sdp)
 
+            if (peerConnection.signalingState() == SignalingState.HAVE_LOCAL_OFFER) {
+                Timber.e("Error: Cannot set remote offer, already have a local offer.")
+                return@launch
+            }
             // Устанавливаем удаленное описание
             peerConnection.setRemoteDescription(object : SdpObserver() {
                 override fun onSetSuccess() {
@@ -349,6 +368,15 @@ class WebRTCManager(
         } else {
             Timber.i("[$target] Local DataChannel 'chat' created. State: ${dataChannel.state()}")
             registerDataChannel(target, dataChannel)
+
+            // Проверяем состояние канала сразу после его создания
+            if (dataChannel.state() == DataChannel.State.OPEN) {
+                // Канал сразу открыт, уведомляем listener
+                listener?.onDataChannelOpen(target)
+            } else {
+                // Канал ещё не открыт, ожидаем изменения состояния
+                Timber.d("[$target] DataChannel is in ${dataChannel.state()} state. Waiting for it to open.")
+            }
             return dataChannel
         }
     }
