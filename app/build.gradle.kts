@@ -52,6 +52,10 @@ android {
 }
 
 dependencies {
+    implementation(libs.bcpkix.jdk18on)
+    implementation(libs.androidx.security.crypto)
+    implementation(libs.bitcoinj.bitcoinj.core)
+
     // gRPC и protobuf зависимости
 
     implementation(libs.grpc.okhttp)
