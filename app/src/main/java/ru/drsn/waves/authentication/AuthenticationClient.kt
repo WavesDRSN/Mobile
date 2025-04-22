@@ -23,14 +23,14 @@ class AuthenticationClient (
 
     private val stub = AuthorisationGrpcKt.AuthorisationCoroutineStub(channel)
 
-    suspend fun reserveNickname(nickname: String) : String {
+    suspend fun reserveNickname(nickname: String) : ReserveNicknameResponse {
         val request = ReserveNicknameRequest.newBuilder()
             .setNickname(nickname)
             .build()
 
         val response: ReserveNicknameResponse = stub.reserveNickname(request)
 
-        return response.reservationToken
+        return response
     }
 
     suspend fun getChallenge(nickname: String) : ChallengeResponse {
