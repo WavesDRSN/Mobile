@@ -1,10 +1,11 @@
 package ru.drsn.waves
 
 import android.app.Application
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import ru.drsn.waves.signaling.SignalingServiceImpl
 import ru.drsn.waves.webrtc.WebRTCManager
-import ru.drsn.waves.webrtc.contract.IWebRTCManager
 import timber.log.Timber
+import java.security.Security
 
 class WavesApplication : Application() {
 
@@ -23,11 +24,18 @@ class WavesApplication : Application() {
             Timber.plant(Timber.DebugTree())
         }
 
+        Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
+        Security.addProvider(BouncyCastleProvider())
+
+
+
         // Создание WebRTCManager перед использованием
         signalingService = SignalingServiceImpl()
         webRTCManager = WebRTCManager(applicationContext)
 
         webRTCManager.signalingService = signalingService;
         signalingService.webRTCManager = webRTCManager
+
+
     }
 }
