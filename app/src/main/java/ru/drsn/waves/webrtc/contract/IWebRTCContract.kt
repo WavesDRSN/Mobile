@@ -5,6 +5,7 @@ import gRPC.v1.IceCandidate as GrpcIceCandidate // Даем псевдоним �
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
+import ru.drsn.waves.data.GroupStore
 import ru.drsn.waves.webrtc.DataChannelHandler
 
 interface IWebRTCManager {
@@ -17,10 +18,13 @@ interface IWebRTCManager {
     fun closeConnection(target: String)
     fun closeAllConnections()
     fun getConnectedPeers(): Set<String>
+    fun handleGroupInfo(groupInfo: String)
+    fun addUserToGroup(groupName: String, userName: String)
+    fun getGroupMembers(groupName: String): Set<String>?
     // Listener для событий, идущих "наверх" (в UI/ViewModel)
     var listener: WebRTCListener?
     var username : String
-    var userslist : List<String>
+    val groupStore : GroupStore
 }
 
 interface ISignalingController {

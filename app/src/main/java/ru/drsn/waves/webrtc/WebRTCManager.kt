@@ -7,6 +7,7 @@ import gRPC.v1.IceCandidate as GrpcIceCandidate
 import kotlinx.coroutines.*
 import org.webrtc.*
 import org.webrtc.PeerConnection.SignalingState
+import ru.drsn.waves.data.GroupStore
 import ru.drsn.waves.signaling.SignalingService // Используем интерфейс
 import ru.drsn.waves.webrtc.contract.ISignalingController
 import ru.drsn.waves.webrtc.contract.IWebRTCManager
@@ -47,7 +48,8 @@ class WebRTCManager(
     override var listener: WebRTCListener? = null
 
     override var username = ""
-    override var userslist = listOf("")
+
+    override val groupStore = GroupStore()
 
 
     init {
@@ -81,6 +83,19 @@ class WebRTCManager(
 
     override fun getConnectedPeers(): Set<String> {
         return peerConnections.keys // или другая структура, где ты хранишь ID peer'ов
+    }
+
+
+    // Добавить нового участника в группу
+    override fun addUserToGroup(groupName: String, userName: String) {
+        groupStore.addUserToGroup(groupName, userName)
+        Timber.i("Added user $userName to group $groupName")
+        Timber.i("group: ${groupStore.getGroup(groupName)?.members}")
+    }
+
+    // Получить участников группы
+    override fun getGroupMembers(groupName: String): Set<String>? {
+        return groupStore.getGroup(groupName)?.members
     }
 
     // --- Реализация IWebRTCManager ---
@@ -216,6 +231,28 @@ class WebRTCManager(
             )
             Timber.d("[$sender] Adding remote ICE candidate: ${iceCandidate.sdpMid}")
             peerConnection.addIceCandidate(iceCandidate)
+        }
+    }
+
+    // Обработать сообщение с SDP информацией о группе
+    override fun handleGroupInfo(groupInfo: String) {
+        Timber.i("Group: $groupInfo")
+
+        // Пример: [Group(name=123, members=[User_182], messages=[])]
+        val regex = Regex("""Group\(name=(.*?), members=\[(.*?)\], messages=.*?\)""")
+        val match = regex.find(groupInfo)
+
+        if (match != null) {
+            val (groupName, membersString) = match.destructured
+            val members = membersString.split(",").map { it.trim() }.toSet()
+
+            for (member in members) {
+                addUserToGroup(groupName, member)
+            }
+
+            Timber.i("Received group info for $groupName with members: $members")
+        } else {
+            Timber.e("handleGroupInfo: failed to parse groupInfo: $groupInfo")
         }
     }
 
