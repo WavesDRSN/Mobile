@@ -3,95 +3,80 @@ package ru.drsn.waves.webrtc
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.forEach
 import kotlinx.coroutines.launch
 import ru.drsn.waves.signaling.SignalingService
 import timber.log.Timber
-import kotlinx.coroutines.delay
+import ru.drsn.waves.data.GroupStore
 
 class MeshOrchestrator(
     private val signalingService: SignalingService,
-    private val webRTCManager: WebRTCManager
+    private val webRTCManager: WebRTCManager,
 ) {
 
-    private val orchestratorScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val connectedPeers = mutableSetOf<String>()
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    init {
-        // Подписка на список пользователей и подключение к новым
-        orchestratorScope.launch {
-            signalingService.usersList.collectLatest { users ->
-                val selfId = signalingService.userName
-                val others = users.filter { it.name != selfId }
+    private val username = webRTCManager.username
 
-                Timber.d("MeshOrchestrator: Обнаружено ${others.size} других пользователей: $others")
+    /**
+     * Создать новую группу и отправить информацию всем пользователям.
+     */
+    fun createGroup(groupName: String) {
+        // Создаем группу с одним пользователем (с собой)
+        webRTCManager.addUserToGroup(groupName, username)
 
-                others.forEach { peerId ->
-                    if (peerId.name !in connectedPeers) {
-                        Timber.i("MeshOrchestrator: Подключаемся к новому peer ${peerId.name}")
-                        connectToPeer(peerId.name)
+        // Отправляем всем пользователям информацию о группе
+        serviceScope.launch {
+            signalingService.usersList.value.forEach { user ->
+                if (user.name != username) {
+                    // Рассылаем информацию о группе всем, кроме себя
+                    signalingService.sendSDP(
+                        "group_info",
+                        "$groupName:${setOf(username).joinToString()}",
+                        user.name
+                    )
+                }
+            }
+        }
+
+        Timber.i("Group $groupName created with participant: $username")
+    }
+
+    /**
+     * Подключиться к группе, добавив себя и распространяя информацию.
+     */
+    fun joinGroup(groupName: String) {
+        // Получаем список участников группы
+        val members = webRTCManager.getGroupMembers(groupName)
+        if (members != null) {
+            // Подключаемся к каждому участнику группы
+            members.forEach { member ->
+                if (member != username) {
+                    // Пытаемся подключиться к каждому участнику
+                    Timber.i("Connecting to member $member in group $groupName")
+                    webRTCManager.call(member)
+                }
+            }
+
+            // После добавления себя:
+            webRTCManager.addUserToGroup(groupName, username)
+
+            // Новый список участников (включая себя)
+            val updatedMembers = members.toMutableSet().apply { add(username) }
+
+            // Рассылаем ВСЕМ участникам, включая новых
+            serviceScope.launch {
+                signalingService.usersList.value.forEach { user ->
+                    if (user.name != username) {
+                        signalingService.sendSDP("group_info",
+                            webRTCManager.groupStore.getAllGroups().toString(), user.name)
                     }
                 }
             }
+
+            Timber.i("Joined group $groupName and added self to the member list.")
+        } else {
+            Timber.w("Group $groupName not found!")
         }
-
-        // Подписка на ретрансляцию событий о новых пользователях
-        orchestratorScope.launch {
-            signalingService.newPeerEvent.collect { newPeer ->
-                val selfId = signalingService.userName
-//                if (newPeer.name != selfId && newPeer.name !in connectedPeers) {
-//                    Timber.i("MeshOrchestrator: Получили ретрансляцию о новом peer ${newPeer.name}. Подключаемся.")
-//                    connectToPeer(newPeer.name)
-//                }
-
-                // Ретранслируем нового пира всем остальным участникам
-                connectedPeers.filter { it != newPeer.name }.forEach { knownPeer ->
-                    Timber.d("MeshOrchestrator: Ретранслируем нового пира ${newPeer.name} для $knownPeer")
-                    signalingService.relayNewPeer(knownPeer, newPeer.name)
-                }
-
-                // Сообщаем новому пиру о уже подключенных
-                connectedPeers.forEach { knownPeerId ->
-                    Timber.d("MeshOrchestrator: Сообщаем новому пиру ${newPeer.name} о уже подключённом $knownPeerId")
-                    signalingService.relayNewPeer(newPeer.name, knownPeerId)
-                }
-            }
-        }
-    }
-
-    private suspend fun connectToPeer(peerId: String) {
-        // Проверка, подключены ли уже
-        if (peerId in connectedPeers) {
-            Timber.d("MeshOrchestrator: Уже подключены к $peerId")
-            return
-        }
-        delay(1000)  // Задержка в 3 секунды (3000 миллисекунд)
-
-        // Инициируем соединение
-        Timber.i("MeshOrchestrator: Инициируем вызов к $peerId")
-        webRTCManager.call(peerId)
-
-        connectedPeers += peerId
-
-        orchestratorScope.launch {
-            // Сообщаем другим пирами о новом
-            connectedPeers.filter { it != peerId }.forEach { knownPeer ->
-                Timber.d("MeshOrchestrator: Ретранслируем нового пира $peerId для $knownPeer")
-                signalingService.relayNewPeer(knownPeer, peerId)
-            }
-
-//            // Сообщаем новому пиру о других
-//            val knownPeers = connectedPeers.filter { it != peerId }
-//            knownPeers.forEach { knownPeerId ->
-//                Timber.d("MeshOrchestrator: Сообщаем новому пиру $peerId о уже подключённом $knownPeerId")
-//                signalingService.relayNewPeer(peerId, knownPeerId)
-//            }
-        }
-    }
-
-    fun close() {
-        orchestratorScope.cancel()
-        Timber.w("MeshOrchestrator: Остановлен и все задачи отменены.")
     }
 }

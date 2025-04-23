@@ -6,6 +6,7 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.webrtc.DataChannel
 import org.webrtc.PeerConnection // Добавлен импорт
@@ -41,11 +42,15 @@ class WebRTCActivity : AppCompatActivity(), WebRTCListener {
     private lateinit var btnConnectGroupChat: Button
     private lateinit var btnRequestConnection: Button
     private lateinit var btnSendMessage: Button
+    private lateinit var btnCreateGroupChat: Button
+
+    private lateinit var meshOrchestrator: MeshOrchestrator
 
     // Флаг, чтобы не запускать ChatActivity несколько раз для одного и того же вызова
     private var chatLaunchedForTarget: String? = null
 
     private val activeUsers = mutableSetOf<String>()  // Для отслеживания участников
+    private var groupName: String? = null  // Для хранения имени группы
 
     // Логгирование
     private val TAG = "WebRTCActivity"
@@ -58,14 +63,18 @@ class WebRTCActivity : AppCompatActivity(), WebRTCListener {
         editTextTarget = findViewById(R.id.editTextTarget)
         editTextMessage = findViewById(R.id.editTextMessage)
         btnConnectServer = findViewById(R.id.btnConnectServer)
+        btnCreateGroupChat = findViewById(R.id.btnCreateGroupChat)
         btnRequestConnection = findViewById(R.id.btnRequestConnection)
         btnConnectGroupChat = findViewById(R.id.btnConnectGroupChat)
         btnSendMessage = findViewById(R.id.btnSendMessage)
+
 
         username = "User_" + Random.nextInt(1000)
         // Инициализация webRTCManager и signalingService происходит через lazy делегаты выше
 
         webRTCManager.username = username
+
+        meshOrchestrator = MeshOrchestrator(signalingService, webRTCManager as WebRTCManager)
 
         btnConnectServer.setOnClickListener {
             connectToServer()
@@ -80,14 +89,26 @@ class WebRTCActivity : AppCompatActivity(), WebRTCListener {
             }
         }
 
-        btnConnectGroupChat.setOnClickListener {
-            targetUser = editTextTarget.text.toString().trim()
-            if (targetUser.isNotEmpty()) {
-                requestConnectionToGroup(targetUser)
+        // Обработчик кнопки для создания группы
+        btnCreateGroupChat.setOnClickListener {
+            val groupName = editTextTarget.text.toString().trim()
+            if (groupName.isNotEmpty()) {
+                createGroup(groupName)
             } else {
-                Toast.makeText(this, "Введите ID собеседника", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Введите имя группы", Toast.LENGTH_SHORT).show()
             }
         }
+
+        // Обработчик кнопки для подключения к группе
+        btnConnectGroupChat.setOnClickListener {
+            val groupName = editTextTarget.text.toString().trim()
+            if (groupName.isNotEmpty()) {
+                connectToGroup(groupName)
+            } else {
+                Toast.makeText(this, "Введите имя группы", Toast.LENGTH_SHORT).show()
+            }
+        }
+
 
         btnSendMessage.setOnClickListener {
             val message = editTextMessage.text.toString()
@@ -127,6 +148,14 @@ class WebRTCActivity : AppCompatActivity(), WebRTCListener {
                 signalingService.connect(username, "10.0.2.2", 50051) // Используем интерфейс
                 Toast.makeText(this@WebRTCActivity, "Подключено к серверу как $username!", Toast.LENGTH_SHORT).show()
                 Timber.tag(TAG).i("Connected to signaling as $username")
+                delay(1000)
+                for (member in signalingService.usersList.value){
+                    if (member.name != username){
+                        signalingService.sendSDP("group_info_request", username, member.name)
+                        return@launch
+                    }
+                }
+                Timber.i("rereererere")
             } catch (e: Exception) {
                 Timber.e(e, "Ошибка подключения к серверу")
                 Toast.makeText(this@WebRTCActivity, "Ошибка подключения: ${e.message}", Toast.LENGTH_LONG).show()
@@ -148,8 +177,22 @@ class WebRTCActivity : AppCompatActivity(), WebRTCListener {
         Toast.makeText(this, "Сообщение отправлено (WebRTC)", Toast.LENGTH_SHORT).show()
     }
 
-    private fun requestConnectionToGroup(target: String){
-        MeshOrchestrator(signalingService, webRTCManager as WebRTCManager)
+    private fun createGroup(groupName: String) {
+        meshOrchestrator.createGroup(groupName)
+        Toast.makeText(this, "Группа $groupName создана", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun connectToGroup(groupName: String) {
+        meshOrchestrator.joinGroup(groupName)
+        Toast.makeText(this, "Подключаемся к группе $groupName", Toast.LENGTH_SHORT).show()
+        val intent = GroupChatActivity.newIntent(
+            context = this,
+            recipientId = groupName,
+            recipientName = groupName,
+            currentUserId = this.username
+        )
+        startActivity(intent)
+
     }
     // --- Реализация методов WebRTCListener ---
 

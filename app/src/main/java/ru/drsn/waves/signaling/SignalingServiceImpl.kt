@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.webrtc.SessionDescription
+import ru.drsn.waves.data.GroupStore
 import ru.drsn.waves.webrtc.SdpObserver
 import ru.drsn.waves.webrtc.WebRTCManager
 import ru.drsn.waves.webrtc.contract.IWebRTCManager
@@ -28,14 +29,8 @@ class SignalingServiceImpl: SignalingService {
     override val usersList: StateFlow<List<User>> = _usersList // Открытый StateFlow для подписки
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val _newPeerEvent = MutableSharedFlow<User>(replay = 0) // Новый SharedFlow для ретрансляции событий
-    override val newPeerEvent: SharedFlow<User> = _newPeerEvent // Открытый SharedFlow для подписки на новые подключения
 
     override var userName = ""
-
-    // Это коллекция для пользователей, с которыми уже установлено соединение
-    private val connectedPeers = mutableSetOf<String>()
-
-
 
     override fun connect(
         username: String,
@@ -64,35 +59,6 @@ class SignalingServiceImpl: SignalingService {
         }
     }
 
-    override fun updateUserList(users: List<User>) {
-        val selfId = userName
-        val previousUsers = _usersList.value
-        val newUsers = users.filter { it.name != selfId }
-
-        newUsers.forEach { newUser ->
-            if (newUser !in previousUsers) {
-                Timber.i("SignalingServiceImpl: Новый пользователь $newUser")
-                // Генерируем событие о новом пировом подключении
-                serviceScope.launch {
-                    _newPeerEvent.emit(newUser)
-                }
-            }
-        }
-
-        _usersList.value = users
-    }
-
-    override suspend fun relayNewPeer(receiver: String, newPeerId: String) {
-        // Формируем SDP-сообщение для нового пира (можно использовать любой формат, который вам удобен)
-        val sdpMessage = newPeerId
-
-        // Вызываем sendSDP для отправки сообщения как тип "new_peer"
-        Timber.i("Sending new peer information to $receiver: $sdpMessage")
-
-        // Отправляем это сообщение как обычный SDP, где type - это "new_peer", sdp - это сам новый peerId
-        sendSDP("new_peer", sdpMessage, receiver)
-    }
-
     override suspend fun disconnect() {
         signalingConnection!!.disconnect()
         signalingConnection = null
@@ -115,21 +81,21 @@ class SignalingServiceImpl: SignalingService {
                 when (sessionDescription.type.lowercase()) {
                     "offer" -> webRTCManager.handleRemoteOffer(sessionDescription.sender, sessionDescription.sdp)
                     "answer" -> webRTCManager.handleRemoteAnswer(sessionDescription.sender, sessionDescription.sdp)
-                    "new_peer" -> {
-                        // Обрабатываем новое подключение
-                        Timber.i("New peer detected: ${sessionDescription.sdp}")
-                        connectToNewPeer(sessionDescription.sdp)
+                    "group_info" -> {
+                        // Обрабатываем информацию о группе
+                        Timber.i("Received group info: ${sessionDescription.sdp}")
+                        webRTCManager.handleGroupInfo(sessionDescription.sdp)
+                    }
+                    "group_info_request" -> {
+                        // Send group info in response
+                        val groupInfo = webRTCManager.groupStore.getAllGroups()
+                        Timber.i("Send group: ${groupInfo.toString()}")
+                        sendSDP("group_info", groupInfo.toString(), sessionDescription.sdp)
                     }
                     else -> Timber.w("Received unknown SDP type: ${sessionDescription.type}")
                 }
             }
         }
-    }
-
-    private fun connectToNewPeer(peerId: String) {
-        // Логика подключения к новому пиру
-        Timber.i("Connecting to new peer: $peerId")
-        webRTCManager.call(peerId)
     }
 
     override suspend fun sendIceCandidates(candidates: List<IceCandidate>, target: String) {
