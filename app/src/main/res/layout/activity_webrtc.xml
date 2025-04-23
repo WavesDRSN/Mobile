@@ -27,6 +27,13 @@
             android:layout_height="wrap_content"
             android:text="Запросить подключение" />
 
+        <Button
+            android:id="@+id/btnCreateGroupChat"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Создать группу" />
+
+
         <!-- Новая кнопка для подключения к групповому чату -->
         <Button
             android:id="@+id/btnConnectGroupChat"
