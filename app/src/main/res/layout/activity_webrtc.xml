@@ -8,6 +8,7 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <!-- Поле для ввода имени пользователя или названия группы -->
         <EditText
             android:id="@+id/editTextTarget"
             android:layout_width="match_parent"
@@ -26,6 +27,13 @@
             android:layout_height="wrap_content"
             android:text="Запросить подключение" />
 
+        <!-- Новая кнопка для подключения к групповому чату -->
+        <Button
+            android:id="@+id/btnConnectGroupChat"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Подключиться к группе" />
+
         <EditText
             android:id="@+id/editTextMessage"
             android:layout_width="match_parent"
@@ -39,6 +47,4 @@
             android:text="Отправить сообщение" />
 
     </LinearLayout>
-
-
 </androidx.constraintlayout.widget.ConstraintLayout>
