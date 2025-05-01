@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.protobuf)
+    alias(libs.plugins.google.devtools.ksp)
+    alias(libs.plugins.google.dagger.hilt)
 }
 
 kotlin {
@@ -53,6 +55,15 @@ android {
 }
 
 dependencies {
+    implementation(libs.hilt.android) // Используйте последнюю версию
+    ksp(libs.hilt.compiler) // или kapt для kapt
+
+    // Hilt для ViewModel 
+    implementation(libs.androidx.hilt.navigation.compose) // Пример для Compose Navigation
+    implementation(libs.androidx.work)
+    implementation(libs.androidx.hilt.work) // Пример для WorkManager
+    ksp(libs.androidx.hilt.compiler) // или kapt
+
     implementation(libs.bcpkix.jdk18on)
     implementation(libs.androidx.security.crypto)
     implementation(libs.bitcoinj.bitcoinj.core)
