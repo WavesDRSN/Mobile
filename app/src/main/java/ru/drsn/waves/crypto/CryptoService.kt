@@ -13,7 +13,9 @@ import timber.log.Timber
 import java.security.PrivateKey
 import java.security.PublicKey
 import java.security.Signature
+import javax.inject.Singleton
 
+@Singleton
 class CryptoService(context: Context) {
 
     companion object {

@@ -8,6 +8,7 @@ import android.util.Log // Добавлен импорт для логирова
 import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import dagger.hilt.android.AndroidEntryPoint
 import org.webrtc.DataChannel
 import org.webrtc.PeerConnection
 import ru.drsn.waves.WavesApplication
@@ -19,15 +20,16 @@ import ru.drsn.waves.webrtc.contract.WebRTCListener
 import timber.log.Timber
 import java.util.Date
 import java.util.UUID
+import javax.inject.Inject
 
-// Реализуем интерфейс WebRTCListener
+@AndroidEntryPoint
 class ChatActivity : AppCompatActivity(), WebRTCListener {
 
     private lateinit var binding: ActivityChatBinding
     private lateinit var chatAdapter: ChatAdapter
 
     // Используем интерфейс IWebRTCManager
-    private lateinit var webRTCManager: IWebRTCManager
+    @Inject lateinit var webRTCManager: IWebRTCManager
 
     private lateinit var currentUserId: String // ID текущего пользователя
     private lateinit var recipientUserId: String
@@ -50,7 +52,6 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
         }
     }
 
-    @SuppressLint("LogNotTimber")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityChatBinding.inflate(layoutInflater)
@@ -67,11 +68,6 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
             Timber.tag(TAG).e("Current User ID not provided in Intent! Using default.")
             "user123" // Запасной вариант, но лучше передавать явно
         }
-
-        // !!! ВАЖНО: Получите ваш экземпляр WebRTCManager !!!
-        // Это может быть синглтон, полученный через DI (Hilt, Koin), Service Locator или из Application класса
-        // Пример:
-        webRTCManager = (application as WavesApplication).webRTCManager // !!! ЗАМЕНИТЕ YourApp.webRTCManager на ваш способ получения !!!
 
         webRTCManager.getDataHandler(recipientUserId)?.changeListener(this)
 

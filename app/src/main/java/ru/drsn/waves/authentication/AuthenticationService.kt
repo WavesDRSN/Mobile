@@ -6,16 +6,22 @@ import io.grpc.StatusRuntimeException
 import ru.drsn.waves.crypto.CryptoService
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class AuthenticationService {
+@Singleton
+class AuthenticationService : IAuthenticationService {
     private lateinit var authenticationService: AuthenticationClient
+
+    @Inject lateinit var cryptoService: CryptoService
+
     private val connected = AtomicBoolean(false)
 
     private var nickname: String? = null
     private var reservationToken: String? = null
     private var expiresAtUnix: Long = 0
 
-    fun openConnection(serverAddress: String, serverPort: Int) {
+    override fun openConnection(serverAddress: String, serverPort: Int) {
         try {
             authenticationService = AuthenticationClient(serverAddress, serverPort)
             connected.set(true)
@@ -24,7 +30,7 @@ class AuthenticationService {
         }
     }
 
-    suspend fun reserveNickname(nickname: String) {
+    override suspend fun reserveNickname(nickname: String) {
         try {
             val response = authenticationService.reserveNickname(nickname)
             reservationToken = response.reservationToken
@@ -35,7 +41,7 @@ class AuthenticationService {
         }
     }
 
-    suspend fun register(publicKey: ByteString) {
+    override suspend fun register(publicKey: ByteString) {
         if (reservationToken == null) throw RuntimeException("Сначала необходимо зарезервировать никнейм")
 
         if (System.currentTimeMillis() >= expiresAtUnix) {
@@ -51,7 +57,7 @@ class AuthenticationService {
         if (!response.success) throw RuntimeException("Регистрация не удалась.\n${response.errorMessage}")
     }
 
-    suspend fun authenticate(nickname: String, cryptoService: CryptoService) {
+    override suspend fun authenticate(nickname: String) {
         val challengeResponse = authenticationService.getChallenge(nickname)
 
         val signature = cryptoService.signData(challengeResponse.challenge.toByteArray())

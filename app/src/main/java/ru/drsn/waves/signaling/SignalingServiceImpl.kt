@@ -4,7 +4,6 @@ import gRPC.v1.Signaling.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -14,10 +13,16 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import ru.drsn.waves.webrtc.contract.IWebRTCManager
 import timber.log.Timber
+import javax.inject.Inject
+import javax.inject.Provider
+import javax.inject.Singleton
 
-class SignalingServiceImpl: SignalingService {
+@Singleton
+class SignalingServiceImpl @Inject constructor(
+    private val webRTCManagerProvider: Provider<IWebRTCManager>
+) : SignalingService {
 
-    lateinit var webRTCManager: IWebRTCManager
+    private val webRTCManager: IWebRTCManager by lazy { webRTCManagerProvider.get() }
 
     private var signalingConnection: SafeSignalingConnection? = null
     private val _usersList = MutableStateFlow<List<User>>(emptyList()) // Внутренний StateFlow
@@ -30,8 +35,6 @@ class SignalingServiceImpl: SignalingService {
 
     // Это коллекция для пользователей, с которыми уже установлено соединение
     private val connectedPeers = mutableSetOf<String>()
-
-
 
     override fun connect(
         username: String,

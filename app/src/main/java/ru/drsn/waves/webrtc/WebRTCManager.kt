@@ -2,6 +2,7 @@
 package ru.drsn.waves.webrtc
 
 import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import gRPC.v1.Signaling.IceCandidate as GrpcIceCandidate
 import gRPC.v1.Signaling.user
 import kotlinx.coroutines.*
@@ -14,12 +15,18 @@ import ru.drsn.waves.webrtc.contract.WebRTCListener
 import timber.log.Timber
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
+import javax.inject.Provider
+import javax.inject.Singleton
 
-class WebRTCManager(
-    private val context: Context // Зависимость от интерфейса сигналинга
+@Singleton
+class WebRTCManager @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val signalingServiceProvider: Provider<SignalingService>
 ) : IWebRTCManager, ISignalingController { // Реализует оба интерфейса
 
-    lateinit var signalingService: SignalingService
+    private val signalingService: SignalingService by lazy { signalingServiceProvider.get() }
+
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default) // Scope для управления корутинами менеджера
     private val peerConnectionFactory: PeerConnectionFactory
     private val iceServers: List<PeerConnection.IceServer> = listOf(
@@ -269,9 +276,6 @@ class WebRTCManager(
         // Создаем копию ключей, чтобы избежать ConcurrentModificationException
         val targets = peerConnections.keys.toList()
         targets.forEach { closeConnection(it) }
-        // Можно также остановить Factory, если менеджер уничтожается
-        // peerConnectionFactory.dispose()
-        // PeerConnectionFactory.shutdownInternalTracer()
         managerScope.cancel() // Отменяем все корутины менеджера
         Timber.w("All connections closed and manager scope cancelled.")
     }

@@ -1,22 +1,13 @@
 package ru.drsn.waves
 
 import android.app.Application
+import dagger.hilt.android.HiltAndroidApp
 import org.bouncycastle.jce.provider.BouncyCastleProvider
-import ru.drsn.waves.signaling.SignalingServiceImpl
-import ru.drsn.waves.webrtc.MeshOrchestrator
-import ru.drsn.waves.webrtc.WebRTCManager
 import timber.log.Timber
 import java.security.Security
 
+@HiltAndroidApp
 class WavesApplication : Application() {
-
-    lateinit var signalingService: SignalingServiceImpl
-        private set
-
-    lateinit var webRTCManager: WebRTCManager
-
-//    lateinit var meshOrchestrator: MeshOrchestrator
-
 
 
     override fun onCreate() {
@@ -29,16 +20,6 @@ class WavesApplication : Application() {
 
         Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
         Security.addProvider(BouncyCastleProvider())
-
-
-
-        // Создание WebRTCManager перед использованием
-        signalingService = SignalingServiceImpl()
-        webRTCManager = WebRTCManager(applicationContext)
-
-        webRTCManager.signalingService = signalingService;
-        signalingService.webRTCManager = webRTCManager
-
 
     }
 }

@@ -6,6 +6,7 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import org.webrtc.DataChannel
 import org.webrtc.PeerConnection // Добавлен импорт
@@ -17,21 +18,15 @@ import ru.drsn.waves.webrtc.WebRTCManager
 import ru.drsn.waves.webrtc.contract.IWebRTCManager
 import ru.drsn.waves.webrtc.contract.WebRTCListener // Импорт интерфейса Listener
 import timber.log.Timber
+import javax.inject.Inject
 import kotlin.random.Random
 
 // Реализуем интерфейс WebRTCListener
+@AndroidEntryPoint
 class WebRTCActivity : AppCompatActivity(), WebRTCListener {
-    // Убираем lateinit для signalingService, т.к. получаем его из Application
-    private val signalingService: SignalingService by lazy {
-        (application as WavesApplication).signalingService
-    }
-    private val webRTCManager: IWebRTCManager by lazy {
-        (application as WavesApplication).webRTCManager
-    }
+    @Inject lateinit var signalingService: SignalingService
+    @Inject lateinit var webRTCManager: IWebRTCManager
 
-//    private val meshOrchestrator: MeshOrchestrator by lazy {
-//        (application as WavesApplication).meshOrchestrator
-//    }
     private lateinit var username: String
     private lateinit var targetUser: String // ID пользователя, которому звоним
 
@@ -124,7 +119,7 @@ class WebRTCActivity : AppCompatActivity(), WebRTCListener {
         lifecycleScope.launch {
             try {
                 // Убедимся, что передаем правильный тип в connect, если он изменился
-                signalingService.connect(username, "10.0.2.2", 50051) // Используем интерфейс
+                signalingService.connect(username, "tt.vld.su", 50051) // Используем интерфейс
                 Toast.makeText(this@WebRTCActivity, "Подключено к серверу как $username!", Toast.LENGTH_SHORT).show()
                 Timber.tag(TAG).i("Connected to signaling as $username")
             } catch (e: Exception) {
@@ -136,7 +131,7 @@ class WebRTCActivity : AppCompatActivity(), WebRTCListener {
     }
 
     private fun requestConnection(target: String) {
-        Timber.tag(TAG).i("Requestingsdsdsd connection to $target")
+        Timber.tag(TAG).i("Requesting connection to $target")
         Toast.makeText(this, "Запрос соединения к $target...", Toast.LENGTH_SHORT).show()
         webRTCManager.call(target)
     }
