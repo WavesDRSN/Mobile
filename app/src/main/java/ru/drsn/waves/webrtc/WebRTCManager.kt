@@ -19,13 +19,11 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 
-@Singleton
 class WebRTCManager @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val signalingServiceProvider: Provider<SignalingService>
+    context: Context
 ) : IWebRTCManager, ISignalingController { // Реализует оба интерфейса
 
-    private val signalingService: SignalingService by lazy { signalingServiceProvider.get() }
+    private lateinit var signalingService: SignalingService
 
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default) // Scope для управления корутинами менеджера
     private val peerConnectionFactory: PeerConnectionFactory
