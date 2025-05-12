@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">Waves</string>
+    <string name="welcomeMessage">Добро пожаловать в Waves</string>
+    <string name="welcomeSecuredMessage">Ваш аккаунт защищён\nкриптографическими ключами</string>
+    <string name="welcomeWeDontUsePasswordsMessage">Мы не используем пароли — только ваше устройство сможет авторизоваться</string>
+    <string name="goToRegistrationButtonText">Регистрация</string>
+    <string name="goToLoggingInButtonText">Вход</string>
 </resources>

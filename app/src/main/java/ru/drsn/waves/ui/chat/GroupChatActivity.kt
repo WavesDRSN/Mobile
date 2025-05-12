@@ -30,7 +30,7 @@ class GroupChatActivity : AppCompatActivity(), WebRTCListener {
     private lateinit var chatAdapter: ChatAdapter
 
     // Используем интерфейс IWebRTCManager
-    @Inject lateinit var webRTCManager: IWebRTCManager
+    lateinit var webRTCManager: IWebRTCManager
 
     private lateinit var currentUserId: String // ID текущего пользователя
     private lateinit var recipientUserId: String
