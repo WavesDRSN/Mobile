@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.protobuf)
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.google.dagger.hilt)
+    alias(libs.plugins.compose.compiler)
 }
 
 kotlin {
@@ -33,6 +34,9 @@ android {
             )
         }
     }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.3"
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
@@ -43,6 +47,7 @@ android {
     buildFeatures {
         viewBinding = true
         buildConfig = true
+        compose = true
     }
     buildTypes {
         release {
@@ -55,7 +60,8 @@ android {
 }
 
 dependencies {
-    implementation(libs.hilt.android) // Используйте последнюю версию
+    implementation(libs.hilt.android)
+    implementation(libs.androidx.material3.android) // Используйте последнюю версию
     ksp(libs.hilt.compiler) // или kapt для kapt
 
     // Hilt для ViewModel 
@@ -87,9 +93,9 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.timber)
-    implementation ("androidx.lifecycle:lifecycle-viewmodel-ktx:2.5.1")
-    implementation ("androidx.lifecycle:lifecycle-livedata-ktx:2.5.1")
-    implementation ("androidx.activity:activity-ktx:1.7.0")
+    implementation (libs.androidx.lifecycle.viewmodel.ktx)
+    implementation (libs.androidx.lifecycle.livedata.ktx)
+    implementation (libs.androidx.activity.ktx)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
