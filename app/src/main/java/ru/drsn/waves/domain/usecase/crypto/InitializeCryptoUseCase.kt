@@ -9,7 +9,11 @@ import javax.inject.Inject
 class InitializeCryptoUseCase @Inject constructor(
     private val cryptoRepository: ICryptoRepository
 ) {
-    suspend operator fun invoke(): Result<InitializationResult, CryptoError> {
+    /**
+     * Пытается загрузить существующие ключи.
+     * Возвращает KeysLoaded в случае успеха, или CryptoError (KeyNotFound, LoadError).
+     */
+    suspend operator fun invoke(): Result<InitializationResult.KeysLoaded, CryptoError> {
         return cryptoRepository.initializeKeysIfNeeded()
     }
 }

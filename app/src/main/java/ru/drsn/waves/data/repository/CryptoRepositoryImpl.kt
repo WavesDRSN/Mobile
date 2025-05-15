@@ -3,8 +3,8 @@ package ru.drsn.waves.data.repository
 import com.google.protobuf.kotlin.toByteString
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import ru.drsn.waves.crypto.SeedPhraseUtil // Используем существующий Util
 import ru.drsn.waves.data.datasource.local.crypto.ICryptoLocalDataSource
+import ru.drsn.waves.data.utils.SeedPhraseUtil
 import ru.drsn.waves.domain.model.crypto.*
 import ru.drsn.waves.domain.model.crypto.PublicKey
 import ru.drsn.waves.domain.model.crypto.Signature
@@ -30,45 +30,84 @@ class CryptoRepositoryImpl @Inject constructor(
     private var currentKeyPair: KeyPair? = null
     private val initMutex = Mutex() // Для потокобезопасной инициализации и доступа к кэшу
 
-    override suspend fun initializeKeysIfNeeded(): Result<InitializationResult, CryptoError> {
-        // Используем Mutex, чтобы избежать гонки состояний при одновременных вызовах
+    override suspend fun initializeKeysIfNeeded(): Result<InitializationResult.KeysLoaded, CryptoError> {
         initMutex.withLock {
-            // Если ключи уже в кэше, значит инициализация прошла успешно
             if (currentKeyPair != null) {
-                Timber.tag(TAG).d("Already initialized (keys in cache).")
+                Timber.tag(TAG).d("Ключи уже в кэше.")
                 return Result.Success(InitializationResult.KeysLoaded)
             }
 
-            Timber.tag(TAG).d("Initializing keys...")
+            Timber.tag(TAG).d("Попытка загрузки существующих ключей...")
             return try {
                 if (localDataSource.keyPairExists()) {
-                    Timber.tag(TAG).i("Key pair found in storage. Loading...")
+                    Timber.tag(TAG).i("Пара ключей найдена в хранилище. Загрузка...")
                     val loadedKeyPair = localDataSource.loadKeyPair()
                     if (loadedKeyPair != null) {
-                        currentKeyPair = loadedKeyPair // Сохраняем в кэш
-                        Timber.tag(TAG).i("Key pair loaded successfully.")
+                        currentKeyPair = loadedKeyPair
+                        Timber.tag(TAG).i("Пара ключей успешно загружена в кэш.")
                         Result.Success(InitializationResult.KeysLoaded)
                     } else {
-                        // Ключи вроде есть, но загрузить не удалось
-                        Timber.tag(TAG).e("Key pair exists in storage but failed to load.")
-                        // Попробуем удалить "сломанные" ключи перед генерацией новых
-                        localDataSource.deleteKeyPair()
-                        generateAndStoreNewKeys() // Генерируем новые
+                        Timber.tag(TAG).e("Пара ключей существует в хранилище, но не удалось загрузить (возможно, повреждены).")
+                        Result.Error(CryptoError.LoadError("Не удалось загрузить существующие ключи.", null))
                     }
                 } else {
-                    Timber.tag(TAG).i("No key pair found in storage. Generating new ones...")
-                    generateAndStoreNewKeys() // Генерируем новые
+                    Timber.tag(TAG).i("Пара ключей не найдена в хранилище.")
+                    Result.Error(CryptoError.KeyNotFound)
                 }
             } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "Initialization failed")
-                currentKeyPair = null // Сбрасываем кэш при ошибке
-                Result.Error(CryptoError.InitializationError("Failed during initialization", e))
+                Timber.tag(TAG).e(e, "Ошибка во время попытки загрузки ключей")
+                currentKeyPair = null
+                Result.Error(CryptoError.LoadError("Исключение во время загрузки ключей", e))
             }
         }
     }
 
-    // Вспомогательная функция для генерации и сохранения новых ключей
-    private suspend fun generateAndStoreNewKeys(): Result<InitializationResult, CryptoError> {
+    /**
+     * Генерирует новую пару ключей Ed25519 из Seed, полученного из мнемонической фразы,
+     * и сохраняет их в локальном хранилище.
+     * Перезаписывает существующие ключи, если они есть.
+     *
+     * @param mnemonicPhrase Мнемоническая фраза для генерации сида.
+     * @return Result с Unit в случае успеха или CryptoError при ошибке.
+     */
+    override suspend fun regenerateKeysFromSeed(mnemonicPhrase: MnemonicPhrase): Result<Unit, CryptoError> {
+        initMutex.withLock { // Блокируем для безопасного изменения currentKeyPair и сохранения
+            Timber.tag(TAG).i("Регенерация ключей из сид-фразы...")
+            return try {
+                val seed = SeedPhraseUtil.generateSeedFromMnemonic(mnemonicPhrase.value)
+                val keyPair = SeedPhraseUtil.generateEd25519KeyPair(seed)
+
+                // Удаляем старые ключи перед сохранением новых, чтобы избежать конфликтов
+                // или просто перезаписываем, если storeKeyPair это поддерживает.
+                // localDataSource.deleteKeyPair()
+
+                val stored = localDataSource.storeKeyPair(keyPair)
+                if (stored) {
+                    currentKeyPair = keyPair // Обновляем кэш
+                    Timber.tag(TAG).i("Ключи успешно регенерированы из сид-фразы и сохранены.")
+                    Result.Success(Unit)
+                } else {
+                    Timber.tag(TAG).e("Не удалось сохранить регенерированные ключи.")
+                    Result.Error(CryptoError.StoreError("Не удалось сохранить регенерированные ключи", null))
+                }
+            } catch (e: IllegalArgumentException) { // От SeedPhraseUtil, если фраза невалидна
+                Timber.tag(TAG).e(e, "Ошибка генерации сида из мнемоники: неверная фраза")
+                Result.Error(CryptoError.GenerationError("Неверная сид-фраза", e))
+            } catch (e: Exception) {
+                Timber.tag(TAG).e(e, "Ошибка при регенерации ключей из сид-фразы")
+                Result.Error(CryptoError.GenerationError("Ошибка регенерации ключей", e))
+            }
+        }
+    }
+
+    /**
+     * Генерирует совершенно новую пару ключей Ed25519 и мнемоническую фразу,
+     * сохраняет ключи в локальном хранилище.
+     * Перезаписывает существующие ключи.
+     *
+     * @return Result с MnemonicPhrase для отображения пользователю или CryptoError при ошибке.
+     */
+    override suspend fun generateAndStoreNewKeys(): Result<InitializationResult.KeysGenerated, CryptoError> {
         return try {
             val mnemonic = SeedPhraseUtil.generateMnemonic()
             val seed = SeedPhraseUtil.generateSeedFromMnemonic(mnemonic)
@@ -220,6 +259,45 @@ class CryptoRepositoryImpl @Inject constructor(
             }
         } catch (e: Exception) {
             Result.Error(CryptoError.DeletionError("Исключение при удалении токена", e))
+        }
+    }
+
+    override suspend fun saveUserNickname(nickname: String): Result<Unit, CryptoError> {
+        return try {
+            val success = localDataSource.saveUserNickname(nickname)
+            if (success) {
+                Result.Success(Unit)
+            } else {
+                Result.Error(CryptoError.StoreError("Не удалось сохранить никнейм в DataSource", null))
+            }
+        } catch (e: Exception) {
+            Result.Error(CryptoError.StoreError("Исключение при сохранении никнейма", e))
+        }
+    }
+
+    override suspend fun getUserNickname(): Result<String, CryptoError> {
+        return try {
+            val nicknameString = localDataSource.loadUserNickname()
+            if (nicknameString != null) {
+                Result.Success(nicknameString)
+            } else {
+                Result.Error(CryptoError.NicknameNotFound("Ошибка: имя пользователя не найдено."))
+            }
+        } catch (e: Exception) {
+            Result.Error(CryptoError.LoadError("Исключение при загрузке никнейма", e))
+        }
+    }
+
+    override suspend fun deleteUserNickname(): Result<Unit, CryptoError> {
+        return try {
+            val success = localDataSource.deleteUserNickname()
+            if (success) {
+                Result.Success(Unit)
+            } else {
+                Result.Error(CryptoError.DeletionError("Не удалось удалить никнейм из DataSource", null))
+            }
+        } catch (e: Exception) {
+            Result.Error(CryptoError.DeletionError("Исключение при удалении никнейма", e))
         }
     }
 }

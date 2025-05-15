@@ -10,6 +10,8 @@ typealias Signature = ByteString
 
 typealias AuthToken = String
 
+typealias UserNickname = String
+
 @JvmInline
 value class MnemonicPhrase(val value: String)
 

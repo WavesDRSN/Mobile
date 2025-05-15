@@ -72,7 +72,7 @@ class AuthTokenInterceptor @Inject constructor(
                     // if (isSecureEndpoint(method)) { // Нужна логика определения защищенных эндпоинтов
                     //     cancel("Missing auth token for secure endpoint", null)
                     //     return // Не вызываем super.start
-                    // }
+                    //}
                 }
                 // Вызываем оригинальный метод start с (возможно) модифицированными заголовками
                 super.start(responseListener, headers)

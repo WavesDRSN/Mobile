@@ -4,6 +4,7 @@ import ru.drsn.waves.domain.model.crypto.AuthToken
 import ru.drsn.waves.domain.model.crypto.CryptoError
 import ru.drsn.waves.domain.model.crypto.InitializationResult
 import ru.drsn.waves.domain.model.crypto.JavaPublicKey
+import ru.drsn.waves.domain.model.crypto.MnemonicPhrase
 import ru.drsn.waves.domain.model.crypto.PublicKey
 import ru.drsn.waves.domain.model.crypto.Signature
 import ru.drsn.waves.domain.model.utils.Result
@@ -36,7 +37,7 @@ interface ICryptoRepository {
      *
      * @return Result с InitializationResult в случае успеха или CryptoError при ошибке.
      */
-    suspend fun initializeKeysIfNeeded(): Result<InitializationResult, CryptoError>
+    suspend fun initializeKeysIfNeeded(): Result<InitializationResult.KeysLoaded, CryptoError>
 
     /**
      * Возвращает текущий публичный ключ.
@@ -85,4 +86,9 @@ interface ICryptoRepository {
      * Проверяет, инициализирована ли криптосистема (ключи загружены или сгенерированы).
      */
     suspend fun isInitialized(): Boolean
+    suspend fun saveUserNickname(nickname: String): Result<Unit, CryptoError>
+    suspend fun getUserNickname(): Result<String, CryptoError>
+    suspend fun deleteUserNickname(): Result<Unit, CryptoError>
+    suspend fun regenerateKeysFromSeed(mnemonicPhrase: MnemonicPhrase): Result<Unit, CryptoError>
+    suspend fun generateAndStoreNewKeys(): Result<InitializationResult.KeysGenerated, CryptoError>
 }

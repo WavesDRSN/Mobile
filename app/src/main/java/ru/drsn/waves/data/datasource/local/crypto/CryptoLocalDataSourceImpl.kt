@@ -29,7 +29,6 @@ class CryptoLocalDataSourceImpl @Inject constructor(
     @ApplicationContext private val context: Context
 ) : ICryptoLocalDataSource {
 
-    // Константы и инициализация BouncyCastle перенесены сюда
     companion object {
         private const val AUTH_TOKEN_KEY = "auth_jwt_token"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
@@ -37,13 +36,14 @@ class CryptoLocalDataSourceImpl @Inject constructor(
         private const val PREFS_FILENAME = "ru.drsn.waves.crypto.key_storage"
         private const val ENCRYPTED_PRIVATE_KEY = "encrypted_private_key_ed25519"
         private const val STORED_PUBLIC_KEY = "public_key_ed25519"
+        private const val USER_NICKNAME_KEY = "user_nickname_key"
         private const val AES_MODE = KeyProperties.KEY_ALGORITHM_AES
         private const val BLOCK_MODE = KeyProperties.BLOCK_MODE_GCM
         private const val PADDING = KeyProperties.ENCRYPTION_PADDING_NONE
         private const val TRANSFORMATION = "$AES_MODE/$BLOCK_MODE/$PADDING"
         private const val GCM_IV_LENGTH_BYTES = 12
         private const val GCM_TAG_LENGTH_BITS = 128
-        private const val KEY_ALGORITHM = "Ed25519" // Алгоритм целевой пары ключей
+        private const val KEY_ALGORITHM = "Ed25519"
         private const val TAG = "CryptoLocalDataSource"
 
         init {
@@ -249,4 +249,39 @@ class CryptoLocalDataSourceImpl @Inject constructor(
             false
         }
     }
+
+    override suspend fun saveUserNickname(nickname: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            sharedPreferences.edit().putString(USER_NICKNAME_KEY, nickname).apply()
+            Timber.tag(TAG).i("Никнейм пользователя '$nickname' сохранен.")
+            true
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Не удалось сохранить никнейм пользователя.")
+            false
+        }
+    }
+
+    override suspend fun loadUserNickname(): String? = withContext(Dispatchers.IO) {
+        try {
+            sharedPreferences.getString(USER_NICKNAME_KEY, null).also {
+                if (it != null) Timber.tag(TAG).d("Никнейм пользователя '$it' загружен.")
+                else Timber.tag(TAG).d("Сохраненный никнейм пользователя не найден.")
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Не удалось загрузить никнейм пользователя.")
+            null
+        }
+    }
+
+    override suspend fun deleteUserNickname(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            sharedPreferences.edit().remove(USER_NICKNAME_KEY).apply()
+            Timber.tag(TAG).i("Никнейм пользователя удален.")
+            true
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Не удалось удалить никнейм пользователя.")
+            false
+        }
+    }
+
 }

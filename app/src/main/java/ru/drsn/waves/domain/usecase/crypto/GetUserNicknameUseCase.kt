@@ -6,14 +6,10 @@ import ru.drsn.waves.domain.model.utils.Result
 import ru.drsn.waves.domain.repository.ICryptoRepository
 import javax.inject.Inject
 
-
-/**
- * UseCase для удаления сохраненного токена аутентификации (например, при выходе).
- */
-class DeleteAuthTokenUseCase @Inject constructor(
+class GetUserNicknameUseCase @Inject constructor(
     private val cryptoRepository: ICryptoRepository
 ) {
-    suspend operator fun invoke(): Result<Unit, CryptoError> {
-        return cryptoRepository.deleteAuthToken()
+    suspend operator fun invoke(): Result<UserNickname, CryptoError> {
+        return cryptoRepository.getUserNickname()
     }
 }

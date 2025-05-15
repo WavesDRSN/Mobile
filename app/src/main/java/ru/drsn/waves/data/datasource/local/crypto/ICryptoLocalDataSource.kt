@@ -12,4 +12,8 @@ interface ICryptoLocalDataSource {
     suspend fun saveAuthToken(token: AuthToken): Boolean
     suspend fun loadAuthToken(): AuthToken?
     suspend fun deleteAuthToken(): Boolean
+
+    suspend fun saveUserNickname(nickname: String): Boolean
+    suspend fun loadUserNickname(): String?
+    suspend fun deleteUserNickname(): Boolean
 }

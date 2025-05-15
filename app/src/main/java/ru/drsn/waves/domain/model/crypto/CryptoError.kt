@@ -8,6 +8,7 @@ sealed class CryptoError {
     data class VerificationError(val message: String?, val cause: Throwable? = null) : CryptoError()
     data class GenerationError(val message: String?, val cause: Throwable? = null) : CryptoError()
     data class InitializationError(val message: String?, val cause: Throwable? = null) : CryptoError()
+    data class NicknameNotFound(val message: String?, val cause: Throwable? = null) : CryptoError()
     data class DeletionError(val message: String?, val cause: Throwable? = null) : CryptoError()
     data class Unknown(val message: String?, val cause: Throwable? = null) : CryptoError()
 }
