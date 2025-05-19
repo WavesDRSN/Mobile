@@ -3,7 +3,6 @@ package ru.drsn.waves.data.datasource.remote.grpc.authentication
 import com.google.protobuf.ByteString
 import gRPC.v1.Authentication.ChallengeResponse
 import io.grpc.StatusRuntimeException
-import ru.drsn.waves.authentication.AuthenticationClient
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
