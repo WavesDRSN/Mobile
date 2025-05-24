@@ -8,9 +8,13 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import ru.drsn.waves.data.repository.CryptoRepositoryImpl
 import ru.drsn.waves.domain.model.crypto.AuthToken
+import ru.drsn.waves.domain.model.crypto.CryptoError
+import ru.drsn.waves.domain.model.utils.Result
 import timber.log.Timber
 import java.io.IOException
 import java.security.*
@@ -18,11 +22,22 @@ import java.security.PublicKey
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.spec.X509EncodedKeySpec
 import javax.crypto.Cipher
+import javax.crypto.KeyAgreement
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
+import javax.crypto.spec.DHParameterSpec
 import javax.crypto.spec.GCMParameterSpec
 import javax.inject.Inject
 import javax.inject.Singleton
+import androidx.core.content.edit
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair
+import org.bouncycastle.crypto.KeyGenerationParameters
+import org.bouncycastle.crypto.digests.SHA256Digest
+import org.bouncycastle.crypto.generators.HKDFBytesGenerator
+import org.bouncycastle.crypto.generators.X25519KeyPairGenerator
+import org.bouncycastle.crypto.params.HKDFParameters
+import org.bouncycastle.crypto.params.X25519PrivateKeyParameters
+import org.bouncycastle.crypto.params.X25519PublicKeyParameters
 
 @Singleton
 class CryptoLocalDataSourceImpl @Inject constructor(
@@ -45,6 +60,8 @@ class CryptoLocalDataSourceImpl @Inject constructor(
         private const val GCM_TAG_LENGTH_BITS = 128
         private const val KEY_ALGORITHM = "Ed25519"
         private const val TAG = "CryptoLocalDataSource"
+        private const val DH_PRIVATE_KEY = "dh_private_key"
+        private const val DH_PUBLIC_KEY = "dh_public_key"
 
         init {
             // Убедимся, что BouncyCastle провайдер добавлен
@@ -110,7 +127,10 @@ class CryptoLocalDataSourceImpl @Inject constructor(
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Failed to create EncryptedSharedPreferences. Using fallback (Not Recommended).")
+            Timber.tag(TAG).e(
+                e,
+                "Failed to create EncryptedSharedPreferences. Using fallback (Not Recommended)."
+            )
             context.getSharedPreferences(PREFS_FILENAME + "_fallback", Context.MODE_PRIVATE)
         }
     }
@@ -156,8 +176,15 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
             val combinedPrivateKey = ByteArray(GCM_IV_LENGTH_BYTES + encryptedPrivateKeyBytes.size)
             System.arraycopy(iv, 0, combinedPrivateKey, 0, GCM_IV_LENGTH_BYTES)
-            System.arraycopy(encryptedPrivateKeyBytes, 0, combinedPrivateKey, GCM_IV_LENGTH_BYTES, encryptedPrivateKeyBytes.size)
-            val base64EncryptedPrivateKey = Base64.encodeToString(combinedPrivateKey, Base64.NO_WRAP)
+            System.arraycopy(
+                encryptedPrivateKeyBytes,
+                0,
+                combinedPrivateKey,
+                GCM_IV_LENGTH_BYTES,
+                encryptedPrivateKeyBytes.size
+            )
+            val base64EncryptedPrivateKey =
+                Base64.encodeToString(combinedPrivateKey, Base64.NO_WRAP)
 
             // 2. Публичный ключ
             val publicKeyBytes = keyPair.public.encoded ?: return@withContext false
@@ -187,7 +214,8 @@ class CryptoLocalDataSourceImpl @Inject constructor(
     }
 
     private fun loadPrivateKeyInternal(): PrivateKey? {
-        val base64EncryptedData = sharedPreferences.getString(ENCRYPTED_PRIVATE_KEY, null) ?: return null
+        val base64EncryptedData =
+            sharedPreferences.getString(ENCRYPTED_PRIVATE_KEY, null) ?: return null
         val aesSecretKey = getOrCreateAesSecretKey() ?: return null
 
         return try {
@@ -202,7 +230,8 @@ class CryptoLocalDataSourceImpl @Inject constructor(
             cipher.init(Cipher.DECRYPT_MODE, aesSecretKey, spec)
             val decryptedBytes = cipher.doFinal(encryptedBytes)
 
-            val keyFactory = KeyFactory.getInstance(KEY_ALGORITHM, BouncyCastleProvider.PROVIDER_NAME)
+            val keyFactory =
+                KeyFactory.getInstance(KEY_ALGORITHM, BouncyCastleProvider.PROVIDER_NAME)
             val keySpec = PKCS8EncodedKeySpec(decryptedBytes)
             keyFactory.generatePrivate(keySpec)
         } catch (e: Exception) {
@@ -215,7 +244,8 @@ class CryptoLocalDataSourceImpl @Inject constructor(
         val base64PublicKey = sharedPreferences.getString(STORED_PUBLIC_KEY, null) ?: return null
         return try {
             val publicKeyBytes = Base64.decode(base64PublicKey, Base64.NO_WRAP)
-            val keyFactory = KeyFactory.getInstance(KEY_ALGORITHM, BouncyCastleProvider.PROVIDER_NAME)
+            val keyFactory =
+                KeyFactory.getInstance(KEY_ALGORITHM, BouncyCastleProvider.PROVIDER_NAME)
             val keySpec = X509EncodedKeySpec(publicKeyBytes)
             keyFactory.generatePublic(keySpec)
         } catch (e: Exception) {
@@ -226,7 +256,9 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
 
     override suspend fun keyPairExists(): Boolean = withContext(Dispatchers.IO) {
-        sharedPreferences.contains(ENCRYPTED_PRIVATE_KEY) && sharedPreferences.contains(STORED_PUBLIC_KEY)
+        sharedPreferences.contains(ENCRYPTED_PRIVATE_KEY) && sharedPreferences.contains(
+            STORED_PUBLIC_KEY
+        )
     }
 
     override suspend fun deleteKeyPair(): Boolean = withContext(Dispatchers.IO) {
@@ -284,4 +316,122 @@ class CryptoLocalDataSourceImpl @Inject constructor(
         }
     }
 
+    override suspend fun getDhKeyFactory(): KeyFactory =
+        KeyFactory.getInstance("DH", BouncyCastleProvider.PROVIDER_NAME)
+
+    override suspend fun generateDhKeyPair(): KeyPair {
+        val paramGen = AlgorithmParameterGenerator.getInstance("DH")
+        paramGen.init(2048)
+        val params = paramGen.generateParameters()
+        val dhSpec = params.getParameterSpec(DHParameterSpec::class.java)
+
+        val generator = KeyPairGenerator.getInstance("DH")
+        generator.initialize(dhSpec)
+        return generator.generateKeyPair()
+    }
+
+    private fun saveDhKeyPair(keyPair: KeyPair) {
+        try {
+            val privateKeyBytes = keyPair.private.encoded
+            val publicKeyBytes = keyPair.public.encoded
+            val base64Private = Base64.encodeToString(privateKeyBytes, Base64.NO_WRAP)
+            val base64Public = Base64.encodeToString(publicKeyBytes, Base64.NO_WRAP)
+            sharedPreferences.edit() {
+                putString(DH_PRIVATE_KEY, base64Private)
+                    .putString(DH_PUBLIC_KEY, base64Public)
+            }
+            Timber.tag(TAG).i("DH KeyPair saved.")
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to save DH KeyPair.")
+        }
+    }
+
+    override suspend fun loadDhKeyPair(): KeyPair? {
+        val base64Private = sharedPreferences.getString(DH_PRIVATE_KEY, null) ?: return null
+        val base64Public = sharedPreferences.getString(DH_PUBLIC_KEY, null) ?: return null
+
+        return try {
+            val privateBytes = Base64.decode(base64Private, Base64.NO_WRAP)
+            val publicBytes = Base64.decode(base64Public, Base64.NO_WRAP)
+            val keyFactory = getDhKeyFactory()
+            val privateKey = keyFactory.generatePrivate(PKCS8EncodedKeySpec(privateBytes))
+            val publicKey = keyFactory.generatePublic(X509EncodedKeySpec(publicBytes))
+            KeyPair(publicKey, privateKey)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to load DH KeyPair.")
+            null
+        }
+    }
+
+    override suspend fun getDhPublicKeyEncoded(): String? {
+        val keyPair = loadDhKeyPair() ?: generateDhKeyPair().also { saveDhKeyPair(it) }
+        return keyPair.public.encoded.let {
+            Base64.encodeToString(it, Base64.NO_WRAP)
+        }
+    }
+
+    override suspend fun computeAndStoreSharedSecret(
+        peerId: String,
+        otherPublicKeyEncoded: String
+    ): ByteArray = withContext(Dispatchers.Default) {
+        val sharedSecret = computeSharedSecret(peerId, otherPublicKeyEncoded)
+        if (sharedSecret.isNotEmpty()) {
+            // Вместо хранения в поле sharedSecrets, можно сохранить в SharedPreferences или вернуть вызывающему
+            // Для примера — просто логируем, а хранить не будем
+            Timber.tag(TAG).i("Shared secret computed for peer $peerId, but not stored in memory.")
+        }
+        sharedSecret
+    }
+
+    private suspend fun computeSharedSecret(
+        myEmheralPrivatKey: String,
+        otherPublicKeyEncoded: String
+    ): ByteArray = withContext(Dispatchers.Default) {
+        try {
+            if (myEmheralPrivatKey.isEmpty() || otherPublicKeyEncoded.isEmpty()) {
+                Timber.tag(TAG).e("Empty key input: private or public key is missing.")
+                return@withContext ByteArray(0)
+            }
+
+            // Декодируем свои ключи
+            val myPrivateKeyBytes = Base64.decode(myEmheralPrivatKey, Base64.NO_WRAP)
+            val myPrivateKey = X25519PrivateKeyParameters(myPrivateKeyBytes, 0)
+
+            val otherPublicKeyBytes = Base64.decode(otherPublicKeyEncoded, Base64.NO_WRAP)
+            val otherPublicKey = X25519PublicKeyParameters(otherPublicKeyBytes, 0)
+
+            // Вычисляем общий секрет
+            val sharedSecret = ByteArray(32)
+            myPrivateKey.generateSecret(otherPublicKey, sharedSecret, 0)
+
+            // Применяем HKDF к sharedSecret
+            val aesKey = hkdf(sharedSecret)
+
+            Timber.tag(TAG).i("Shared secret successfully derived with ephemeral X25519 keys.")
+            aesKey
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error during X25519 shared secret computation.")
+            ByteArray(0)
+        }
+    }
+
+    override suspend fun loadStaticPrivateKey(): ByteArray {
+        val base64 = sharedPreferences.getString("STATIC_PRIV", null)
+        val decoded = Base64.decode(base64, Base64.NO_WRAP)
+        return X25519PrivateKeyParameters(decoded, 0).encoded
+    }
+
+    private fun hkdf(input: ByteArray, length: Int = 32): ByteArray {
+        val hkdf = HKDFBytesGenerator(SHA256Digest())
+        hkdf.init(HKDFParameters(input, null, null))
+        val output = ByteArray(length)
+        hkdf.generateBytes(output, 0, length)
+        return output
+    }
+
+    override suspend fun generateEphemeralKeyPair(): AsymmetricCipherKeyPair? {
+        val generator = X25519KeyPairGenerator()
+        generator.init(KeyGenerationParameters(SecureRandom(), 256))
+        return generator.generateKeyPair()
+    }
 }
