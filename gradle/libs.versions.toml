@@ -17,6 +17,7 @@ espressoCore = "3.6.1"
 appcompat = "1.7.0"
 kotlinLogging = "3.0.5"
 kotlinxCoroutinesCore = "1.7.3"
+kotlinxSerializationJson = "1.8.1"
 lifecycleViewmodelKtx = "2.8.7"
 material = "1.12.0"
 grpc = "1.64.0"
@@ -50,6 +51,7 @@ androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-co
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 kotlin-logging = { module = "io.github.microutils:kotlin-logging", version.ref = "kotlinLogging" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 protoc = { module = "com.google.protobuf:protoc", version = "3.25.3" }
 protoc-gen-grpc-java = { module = "io.grpc:protoc-gen-grpc-java", version.ref = "grpc" }

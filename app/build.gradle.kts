@@ -103,6 +103,9 @@ dependencies {
 
     //webrtc
     implementation(libs.stream.webrtc.android)
+
+    //serialization
+    implementation (libs.kotlinx.serialization.json)
 }
 
 
