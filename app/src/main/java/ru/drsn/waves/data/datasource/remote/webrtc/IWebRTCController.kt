@@ -86,4 +86,6 @@ interface IWebRTCController {
      * Возвращает множество ID всех пиров, для которых существует PeerConnection.
      */
     fun getActivePeerIds(): Set<PeerId>
+
+    suspend fun sendOwnPublicKey(peerId: PeerId)
 }

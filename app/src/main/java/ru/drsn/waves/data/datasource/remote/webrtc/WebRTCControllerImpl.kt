@@ -5,6 +5,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.serialization.json.Json
 import org.webrtc.*
 import ru.drsn.waves.domain.model.webrtc.PeerId
 import timber.log.Timber
@@ -478,5 +479,12 @@ class WebRTCControllerImpl @Inject constructor(
             Timber.tag(TAG).w("PeerConnectionFactory освобождена.")
             controllerScope.cancel("Все соединения закрыты, контроллер завершает работу.")
         }
+    }
+
+    override suspend fun sendOwnPublicKey(peerId: PeerId) {
+        val json : Json = Json
+        val publicKey = TODO("получить публичный ключ для отправки")
+        val message =  json.encodeToString("key_exchange$publicKey")
+        sendMessage(peerId, "",  message.toByteArray())
     }
 }
