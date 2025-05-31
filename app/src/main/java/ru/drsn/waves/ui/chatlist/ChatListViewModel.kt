@@ -144,6 +144,8 @@ class ChatListViewModel @Inject constructor(
     private val _showToastEvent = MutableSharedFlow<String>()
     val showToastEvent: Flow<String> = _showToastEvent.asSharedFlow()
 
+    fun getCurrentUsername(): String? = currentUsername
+
     fun onSearchQueryChanged(query: String) {
         // TODO: Реализовать логику поиска
         Timber.d("Поисковый запрос: $query")

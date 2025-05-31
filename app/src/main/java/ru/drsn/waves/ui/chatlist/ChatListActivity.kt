@@ -12,6 +12,7 @@ import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
+import androidx.core.view.get
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -22,6 +23,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import ru.drsn.waves.R
 import ru.drsn.waves.databinding.ActivityChatListBinding
+import ru.drsn.waves.databinding.NavHeaderMainBinding
 import ru.drsn.waves.ui.chat.ChatActivity
 import timber.log.Timber
 
@@ -30,6 +32,7 @@ class ChatListActivity : AppCompatActivity(), NavigationView.OnNavigationItemSel
 
     private val viewModel: ChatListViewModel by viewModels()
     private lateinit var binding: ActivityChatListBinding
+    private lateinit var navViewHeaderBinding: NavHeaderMainBinding
     private lateinit var chatListAdapter: ChatListAdapter
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var toggle: ActionBarDrawerToggle
@@ -37,6 +40,7 @@ class ChatListActivity : AppCompatActivity(), NavigationView.OnNavigationItemSel
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityChatListBinding.inflate(layoutInflater)
+        navViewHeaderBinding = NavHeaderMainBinding.inflate(layoutInflater)
         setContentView(binding.root) // Убедись, что это корневой элемент DrawerLayout
         Timber.d("ChatListActivity создана")
 
