@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import ru.drsn.waves.R
 import ru.drsn.waves.databinding.ActivityRegistrationFlowHostBinding // Нужен новый layout для хоста
 import ru.drsn.waves.ui.chatlist.ChatListActivity
+import ru.drsn.waves.ui.login.LoginActivity
 import ru.drsn.waves.ui.registration.RegistrationFlowEvent
 import ru.drsn.waves.ui.registration.RegistrationFlowUiState
 import ru.drsn.waves.ui.registration.RegistrationFlowViewModel
@@ -81,6 +82,14 @@ class RegistrationFlowHostActivity : AppCompatActivity() {
                             is RegistrationFlowEvent.NavigateToChatList -> {
                                 Timber.i("Навигация на ChatListActivity из RegistrationFlowHostActivity")
                                 val intent = Intent(this@RegistrationFlowHostActivity, ChatListActivity::class.java).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                }
+                                startActivity(intent)
+                                finish()
+                            }
+                            is RegistrationFlowEvent.NavigateToLogin -> {
+                                Timber.i("Навигация на LoginActivity из RegistrationFlowHostActivity")
+                                val intent = Intent(this@RegistrationFlowHostActivity, LoginActivity::class.java).apply {
                                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                                 }
                                 startActivity(intent)

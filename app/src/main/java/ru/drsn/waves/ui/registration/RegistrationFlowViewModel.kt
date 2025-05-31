@@ -174,4 +174,10 @@ class RegistrationFlowViewModel @Inject constructor(
         // currentReservationToken и currentNickname остаются, чтобы не вводить заново, если это была ошибка верификации
         _uiState.value = RegistrationFlowUiState.NicknameEntryStep
     }
+
+    fun onNavigateToLoginScreenRequested() {
+        viewModelScope.launch {
+            _event.emit(RegistrationFlowEvent.NavigateToLogin)
+        }
+    }
 }

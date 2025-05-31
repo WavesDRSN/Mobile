@@ -60,9 +60,9 @@ class NicknameEntryFragment : Fragment() {
         }
 
         binding.loginLinkTextView.setOnClickListener {
-            // TODO: Навигация на экран входа (SeedPhraseEntryActivity)
+            // TODO: Навигация на экран входа
             // Лучше через событие ViewModel, чтобы хост-активити выполнила навигацию
-            // viewModel.onNavigateToLoginScreenRequested()
+            viewModel.onNavigateToLoginScreenRequested()
             Toast.makeText(requireContext(), "Переход на Вход (TODO)", Toast.LENGTH_SHORT).show()
         }
 

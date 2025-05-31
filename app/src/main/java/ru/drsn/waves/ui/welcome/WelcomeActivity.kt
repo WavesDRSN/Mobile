@@ -12,6 +12,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import ru.drsn.waves.databinding.ActivityWelcomeBinding
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import ru.drsn.waves.ui.login.LoginActivity
 import ru.drsn.waves.ui.registration.host.RegistrationFlowHostActivity
 import timber.log.Timber
 
@@ -90,7 +91,7 @@ class WelcomeActivity : AppCompatActivity() {
             is WelcomeEvent.NavigateToLogin -> {
                 Timber.i("Навигация на LoginActivity")
                 //TODO: Создать Login Activity
-                // startActivity(Intent(this, LoginActivity::class.java))
+                startActivity(Intent(this, LoginActivity::class.java))
 
                 // finish() // Не закрываем WelcomeActivity, чтобы пользователь мог вернуться
             }

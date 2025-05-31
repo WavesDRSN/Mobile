@@ -16,6 +16,7 @@ import javax.inject.Inject
 import ru.drsn.waves.domain.model.utils.Result
 import ru.drsn.waves.domain.usecase.crypto.InitializeCryptoUseCase
 import timber.log.Timber
+
 @HiltViewModel
 class LauncherViewModel @Inject constructor(
     private val initializeCryptoUseCase: InitializeCryptoUseCase, // Заменен IsCryptoInitializedUseCase
