@@ -5,10 +5,12 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import ru.drsn.waves.data.repository.AuthenticationRepositoryImpl
+import ru.drsn.waves.data.repository.ChatRepositoryImpl
 import ru.drsn.waves.data.repository.CryptoRepositoryImpl
 import ru.drsn.waves.data.repository.SignalingRepositoryImpl
 import ru.drsn.waves.data.repository.WebRTCRepositoryImpl
 import ru.drsn.waves.domain.repository.IAuthenticationRepository
+import ru.drsn.waves.domain.repository.IChatRepository
 import ru.drsn.waves.domain.repository.ICryptoRepository
 import ru.drsn.waves.domain.repository.ISignalingRepository
 import ru.drsn.waves.domain.repository.IWebRTCRepository
@@ -41,4 +43,10 @@ abstract class RepositoryModule {
     abstract fun bindWebRTCRepository(
         impl: WebRTCRepositoryImpl
     ): IWebRTCRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindChatRepository(
+        impl: ChatRepositoryImpl
+    ): IChatRepository
 }
