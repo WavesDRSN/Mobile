@@ -37,6 +37,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
         private const val ENCRYPTED_PRIVATE_KEY = "encrypted_private_key_ed25519"
         private const val STORED_PUBLIC_KEY = "public_key_ed25519"
         private const val USER_NICKNAME_KEY = "user_nickname_key"
+        private const val ENCRYPTED_CHAT_ENCRYPTION_KEY = "encrypted_chat_key_v1"
         private const val AES_MODE = KeyProperties.KEY_ALGORITHM_AES
         private const val BLOCK_MODE = KeyProperties.BLOCK_MODE_GCM
         private const val PADDING = KeyProperties.ENCRYPTION_PADDING_NONE
@@ -56,6 +57,81 @@ class CryptoLocalDataSourceImpl @Inject constructor(
             }
         }
     }
+
+
+    private val keyStore: KeyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply {
+        load(null)
+    }
+
+    private val sharedPreferences by lazy {
+        try {
+            val masterKey = MasterKey.Builder(context, MasterKey.DEFAULT_MASTER_KEY_ALIAS)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+
+            EncryptedSharedPreferences.create(
+                context,
+                PREFS_FILENAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to create EncryptedSharedPreferences. Using fallback (Not Recommended).")
+            context.getSharedPreferences(PREFS_FILENAME + "_fallback", Context.MODE_PRIVATE)
+        }
+    }
+
+    override suspend fun wrapDataWithKeystoreKey(dataToWrap: ByteArray, keystoreWrappingKeyAlias: String): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            val wrappingKey = getOrCreateAesSecretKey()
+            if (wrappingKey == null) {
+                Timber.tag(TAG).e("Ключ-обертка '$keystoreWrappingKeyAlias' недоступен.")
+                return@withContext null
+            }
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, wrappingKey) // IV генерируется автоматически
+            val iv = cipher.iv
+            if (iv == null || iv.size != GCM_IV_LENGTH_BYTES) {
+                Timber.tag(TAG).e("Некорректный IV при шифровании данных ключом-оберткой.")
+                return@withContext null
+            }
+            val encryptedData = cipher.doFinal(dataToWrap)
+            val result = ByteArray(iv.size + encryptedData.size)
+            System.arraycopy(iv, 0, result, 0, iv.size)
+            System.arraycopy(encryptedData, 0, result, iv.size, encryptedData.size)
+            result
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Ошибка при шифровании данных ключом-оберткой '$keystoreWrappingKeyAlias'.")
+            null
+        }
+    }
+
+    override suspend fun unwrapDataWithKeystoreKey(wrappedDataWithIv: ByteArray, keystoreWrappingKeyAlias: String): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            if (wrappedDataWithIv.size <= GCM_IV_LENGTH_BYTES) {
+                Timber.tag(TAG).e("Некорректная длина зашифрованных данных (слишком короткие для IV).")
+                return@withContext null
+            }
+            val wrappingKey = getOrCreateAesSecretKey()
+            if (wrappingKey == null) {
+                Timber.tag(TAG).e("Ключ-обертка '$keystoreWrappingKeyAlias' недоступен.")
+                return@withContext null
+            }
+
+            val iv = wrappedDataWithIv.copyOfRange(0, GCM_IV_LENGTH_BYTES)
+            val encryptedData = wrappedDataWithIv.copyOfRange(GCM_IV_LENGTH_BYTES, wrappedDataWithIv.size)
+
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            val spec = GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv)
+            cipher.init(Cipher.DECRYPT_MODE, wrappingKey, spec)
+            cipher.doFinal(encryptedData)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Ошибка при дешифровании данных ключом-оберткой '$keystoreWrappingKeyAlias'.")
+            null
+        }
+    }
+
 
     override suspend fun saveAuthToken(token: AuthToken): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -88,30 +164,6 @@ class CryptoLocalDataSourceImpl @Inject constructor(
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Не удалось удалить auth token.")
             false
-        }
-    }
-
-
-    private val keyStore: KeyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply {
-        load(null)
-    }
-
-    private val sharedPreferences by lazy {
-        try {
-            val masterKey = MasterKey.Builder(context, MasterKey.DEFAULT_MASTER_KEY_ALIAS)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-
-            EncryptedSharedPreferences.create(
-                context,
-                PREFS_FILENAME,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Failed to create EncryptedSharedPreferences. Using fallback (Not Recommended).")
-            context.getSharedPreferences(PREFS_FILENAME + "_fallback", Context.MODE_PRIVATE)
         }
     }
 
@@ -280,6 +332,40 @@ class CryptoLocalDataSourceImpl @Inject constructor(
             true
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Не удалось удалить никнейм пользователя.")
+            false
+        }
+    }
+
+    override suspend fun saveEncryptedChatKey(encryptedChatKeyB64: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            sharedPreferences.edit().putString(ENCRYPTED_CHAT_ENCRYPTION_KEY, encryptedChatKeyB64).apply()
+            Timber.tag(TAG).i("Зашифрованный ключ шифрования чатов (CEK) сохранен.")
+            true
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Не удалось сохранить зашифрованный CEK.")
+            false
+        }
+    }
+
+    override suspend fun loadEncryptedChatKey(): String? = withContext(Dispatchers.IO) {
+        try {
+            sharedPreferences.getString(ENCRYPTED_CHAT_ENCRYPTION_KEY, null).also {
+                if (it != null) Timber.tag(TAG).d("Зашифрованный CEK загружен.")
+                else Timber.tag(TAG).d("Зашифрованный CEK не найден.")
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Не удалось загрузить зашифрованный CEK.")
+            null
+        }
+    }
+
+    override suspend fun deleteEncryptedChatKey(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            sharedPreferences.edit().remove(ENCRYPTED_CHAT_ENCRYPTION_KEY).apply()
+            Timber.tag(TAG).i("Зашифрованный CEK удален.")
+            true
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Не удалось удалить зашифрованный CEK.")
             false
         }
     }
