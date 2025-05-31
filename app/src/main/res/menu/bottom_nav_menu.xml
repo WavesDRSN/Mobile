@@ -3,14 +3,14 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:id="@+id/navigation_chats"
-        android:icon="@android:drawable/ic_dialog_dialer"
+        android:icon="@drawable/ic_chats"
         android:title="@string/bottom_nav_chats" />
     <item
         android:id="@+id/navigation_calls"
-        android:icon="@android:drawable/ic_menu_call"
+        android:icon="@drawable/ic_call"
         android:title="@string/bottom_nav_calls" />
     <item
         android:id="@+id/navigation_profile"
-        android:icon="@drawable/ic_default_avatar"
+        android:icon="@drawable/ic_profile"
         android:title="@string/bottom_nav_profile" />
 </menu>
