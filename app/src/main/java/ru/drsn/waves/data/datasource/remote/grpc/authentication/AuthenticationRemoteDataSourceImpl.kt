@@ -7,12 +7,8 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-
-// Реализация DataSource
-@Singleton // Или другой скоуп, если нужно
+@Singleton
 class AuthenticationRemoteDataSourceImpl @Inject constructor(
-    // Можно инжектить фабрику или сам клиент, если он синглтон
-    // private val clientFactory: AuthenticationClientFactory
 ) : IAuthenticationRemoteDataSource {
 
     private var authenticationClient: AuthenticationClient? = null

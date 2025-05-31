@@ -1,108 +1,138 @@
 package ru.drsn.waves.ui.chat
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log // Добавлен импорт для логирования
 import android.view.MenuItem
+import android.view.View
+import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import dagger.hilt.android.AndroidEntryPoint
-import org.webrtc.DataChannel
-import org.webrtc.PeerConnection
-import ru.drsn.waves.WavesApplication
-import ru.drsn.waves.data.Message // Убедитесь, что этот импорт правильный
+import kotlinx.coroutines.launch
 import ru.drsn.waves.databinding.ActivityChatBinding
-// Импортируем интерфейсы и менеджер WebRTC
-import ru.drsn.waves.webrtc.contract.IWebRTCManager
-import ru.drsn.waves.webrtc.contract.WebRTCListener
+import ru.drsn.waves.domain.model.utils.Result // Общий Result
+import ru.drsn.waves.domain.model.chat.*
 import timber.log.Timber
-import java.util.Date
-import java.util.UUID
-import javax.inject.Inject
 
 @AndroidEntryPoint
-class ChatActivity : AppCompatActivity(), WebRTCListener {
-
-    private lateinit var binding: ActivityChatBinding
-    private lateinit var chatAdapter: ChatAdapter
-
-    // Используем интерфейс IWebRTCManager
-    lateinit var webRTCManager: IWebRTCManager
-
-    private lateinit var currentUserId: String // ID текущего пользователя
-    private lateinit var recipientUserId: String
-    private lateinit var recipientName: String
-
-    // Логгирование
-    private val TAG = "ChatActivity"
+class ChatActivity : AppCompatActivity() {
 
     companion object {
-        private const val EXTRA_RECIPIENT_ID = "recipient_id"
-        private const val EXTRA_RECIPIENT_NAME = "recipient_name"
-        private const val EXTRA_CURRENT_USER_ID = "current_user_id" // Рекомендуется передавать ID
+        const val EXTRA_SESSION_ID = "session_id"
+        const val EXTRA_PEER_NAME = "peer_name" // Имя собеседника или название чата
+        const val EXTRA_CHAT_TYPE = "chat_type" // "PEER_TO_PEER" или "GROUP"
 
-        fun newIntent(context: Context, recipientId: String, recipientName: String, currentUserId: String): Intent {
+        fun newIntent(context: Context, sessionId: String, peerName: String, chatType: ChatType): Intent {
             return Intent(context, ChatActivity::class.java).apply {
-                putExtra(EXTRA_RECIPIENT_ID, recipientId)
-                putExtra(EXTRA_RECIPIENT_NAME, recipientName)
-                putExtra(EXTRA_CURRENT_USER_ID, currentUserId) // Передаем ID текущего пользователя
+                putExtra(EXTRA_SESSION_ID, sessionId)
+                putExtra(EXTRA_PEER_NAME, peerName)
+                putExtra(EXTRA_CHAT_TYPE, chatType.name)
             }
         }
     }
+
+    private val viewModel: ChatViewModel by viewModels()
+    private lateinit var binding: ActivityChatBinding
+    private lateinit var messageListAdapter: MessageListAdapter
+    private lateinit var linearLayoutManager: LinearLayoutManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityChatBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        // Получаем данные собеседника и текущего пользователя из Intent
-        recipientUserId = intent.getStringExtra(EXTRA_RECIPIENT_ID) ?: run {
-            Timber.tag(TAG).e("Recipient ID not provided in Intent!")
-            finish() // Закрываем активити, если нет ID собеседника
-            return // Выходим из onCreate
-        }
-        recipientName = intent.getStringExtra(EXTRA_RECIPIENT_NAME) ?: "Собеседник"
-        currentUserId = intent.getStringExtra(EXTRA_CURRENT_USER_ID) ?: run {
-            Timber.tag(TAG).e("Current User ID not provided in Intent! Using default.")
-            "user123" // Запасной вариант, но лучше передавать явно
-        }
-
-        webRTCManager.getDataHandler(recipientUserId)?.changeListener(this)
+        Timber.d("ChatActivity создана для сессии: ${viewModel.sessionId}")
 
         setupToolbar()
         setupRecyclerView()
-        setupSendButton()
-        loadInitialMessages() // Пока загружает только примеры
+        setupInputControls()
+        observeViewModel()
     }
-
-    override fun onStart() {
-        super.onStart()
-        // Регистрируем эту Activity как слушателя событий WebRTC
-        Timber.tag(TAG).d("Registering WebRTC listener for target: $recipientUserId")
-        webRTCManager.listener = this
-    }
-
-    override fun onStop() {
-        super.onStop()
-        // ВАЖНО: Убираем слушателя, чтобы избежать утечек памяти и
-        // получения сообщений, когда Activity неактивна.
-        // Проверяем, что убираем именно себя (на случай, если другой слушатель был установлен)
-        if (webRTCManager.listener === this) {
-            Timber.tag(TAG).d("Unregistering WebRTC listener")
-            webRTCManager.listener = null
-        }
-    }
-
 
     private fun setupToolbar() {
         setSupportActionBar(binding.toolbarChat)
-        supportActionBar?.apply {
-            title = recipientName
-            // subtitle = "Offline" // Начальное состояние
-            setDisplayHomeAsUpEnabled(true)
-            setDisplayShowHomeEnabled(true)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        // Заголовок будет установлен из ViewModel
+    }
+
+    private fun setupRecyclerView() {
+        // ID текущего пользователя нужен для адаптера, чтобы различать свои и чужие сообщения.
+        // ViewModel его получает асинхронно, поэтому адаптер создаем здесь,
+        // но currentUserId передаем позже или делаем адаптер способным его обновлять.
+        // Простой вариант: передать его при обновлении списка.
+        // Более сложный: ViewModel предоставляет Flow<String?> currentUserId.
+        // Пока что оставим так, предполагая, что ViewModel его предоставит при первом Success.
+
+        linearLayoutManager = LinearLayoutManager(this).apply {
+            stackFromEnd = true // Новые сообщения добавляются снизу и прокручивают список вверх
+        }
+        binding.messagesRecyclerView.layoutManager = linearLayoutManager
+    }
+
+    private fun setupInputControls() {
+        binding.messageEditText.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                viewModel.onMessageInputChanged(s.toString())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        binding.sendButton.setOnClickListener {
+            viewModel.sendMessage()
+        }
+        // TODO: Обработка attachButton
+    }
+
+    private fun observeViewModel() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.uiState.collect { state ->
+                        Timber.d("Новое состояние UI в ChatActivity: $state")
+                        binding.progressBarChat.visibility = if (state is ChatUiState.Loading) View.VISIBLE else View.GONE
+
+                        when (state) {
+                            is ChatUiState.Success -> {
+                                supportActionBar?.title = state.chatSessionDetails?.peerName ?: viewModel.sessionId
+
+                                // Инициализируем или обновляем адаптер, если currentUserId доступен
+                                val currentUserId = (viewModel.getUserNicknameUseCase() as? Result.Success)?.value
+                                if (currentUserId != null) {
+                                    if (!this@ChatActivity::messageListAdapter.isInitialized) {
+                                        messageListAdapter = MessageListAdapter(currentUserId, viewModel.chatTypeFromArgs)
+                                        binding.messagesRecyclerView.adapter = messageListAdapter
+                                    }
+                                    messageListAdapter.submitList(state.messages) {
+                                        // Прокрутка к последнему сообщению после обновления списка
+                                        if (state.messages.isNotEmpty()) {
+                                            binding.messagesRecyclerView.smoothScrollToPosition(state.messages.size - 1)
+                                        }
+                                    }
+                                } else {
+                                    Timber.w("currentUserId еще не доступен, адаптер не обновлен/не создан.")
+                                }
+                            }
+                            is ChatUiState.Error -> {
+                                Toast.makeText(this@ChatActivity, state.message, Toast.LENGTH_LONG).show()
+                            }
+                            is ChatUiState.Loading -> { /* Уже обработано ProgressBar */ }
+                        }
+                    }
+                }
+                launch {
+                    viewModel.currentMessageInput.collect { inputText ->
+                        if (binding.messageEditText.text.toString() != inputText) {
+                            binding.messageEditText.setText(inputText)
+                            binding.messageEditText.setSelection(inputText.length) // Перемещаем курсор в конец
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -112,136 +142,5 @@ class ChatActivity : AppCompatActivity(), WebRTCListener {
             return true
         }
         return super.onOptionsItemSelected(item)
-    }
-
-
-    private fun setupRecyclerView() {
-        chatAdapter = ChatAdapter(currentUserId)
-        binding.recyclerViewMessages.apply {
-            adapter = chatAdapter
-            layoutManager = LinearLayoutManager(this@ChatActivity).apply {
-                stackFromEnd = true // Новые сообщения будут внизу
-            }
-        }
-    }
-
-    private fun setupSendButton() {
-        binding.buttonSendMessage.setOnClickListener {
-            val messageText = binding.editTextMessageInput.text.toString().trim()
-            if (messageText.isNotEmpty()) {
-                sendMessage(messageText)
-                binding.editTextMessageInput.text.clear()
-            }
-        }
-    }
-
-    private fun sendMessage(text: String) {
-        val newMessage = Message(
-            id = UUID.randomUUID().toString(),
-            text = text,
-            senderId = currentUserId,
-            timestamp = Date().time
-        )
-        chatAdapter.addMessage(newMessage)
-        binding.recyclerViewMessages.scrollToPosition(chatAdapter.itemCount - 1)
-
-        // Получаем всех подключённых пользователей
-        val connectedPeers = webRTCManager.getConnectedPeers()
-
-        // Рассылаем сообщение каждому
-        connectedPeers.forEach { peerId ->
-            Timber.tag(TAG).d("Sending message to $peerId via WebRTC: $text")
-            webRTCManager.sendMessage(peerId, text)
-        }
-
-        // Можно сохранить сообщение в базу, если нужно
-    }
-
-    private fun loadInitialMessages() {
-        // !!! Замените на реальную загрузку сообщений из локальной БД или кэша !!!
-        Timber.tag(TAG).w("Loading sample messages only!")
-        val sampleMessages = listOf(
-            Message(UUID.randomUUID().toString(), "Привет!", recipientUserId, Date().time - 50000),
-            Message(UUID.randomUUID().toString(), "Привет! Как твои дела?", currentUserId, Date().time - 40000),
-            Message(UUID.randomUUID().toString(), "Норм, твои как?", recipientUserId, Date().time - 30000)
-        )
-        chatAdapter.submitList(sampleMessages.toMutableList())
-    }
-
-    // --- Реализация методов WebRTCListener ---
-
-    override fun onConnectionStateChanged(target: String, state: PeerConnection.IceConnectionState) {
-        // Проверяем, относится ли изменение состояния к текущему собеседнику
-        if (target == recipientUserId) {
-            Timber.tag(TAG).i("Connection state for $target changed: $state")
-            // Обновляем UI в главном потоке
-            runOnUiThread {
-                // Пример обновления подзаголовка в Toolbar
-                supportActionBar?.subtitle = when(state) {
-                    PeerConnection.IceConnectionState.CHECKING -> "Проверка..."
-                    PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> "Соединено"
-                    PeerConnection.IceConnectionState.DISCONNECTED -> "Отключено"
-                    PeerConnection.IceConnectionState.FAILED -> "Ошибка соединения"
-                    PeerConnection.IceConnectionState.CLOSED -> "Закрыто"
-                    PeerConnection.IceConnectionState.NEW -> "Новое"
-                    else -> "Статус неизвестен"
-                }
-            }
-        } else {
-            Timber.tag(TAG).d("Ignoring connection state change for different target: $target")
-        }
-    }
-
-    override fun onMessageReceived(sender: String, message: String) {
-        Timber.tag(TAG)
-            .i("Message received from $sender: $message (Callback Thread: ${Thread.currentThread().name})")
-
-        runOnUiThread {
-            Timber.tag(TAG).d("Displaying message from $sender on Main Thread")
-            val receivedMessage = Message(
-                id = UUID.randomUUID().toString(),
-                text = message,
-                senderId = sender,
-                timestamp = Date().time
-            )
-
-            // Если это активный чат — просто отображаем
-            if (sender == recipientUserId) {
-                chatAdapter.addMessage(receivedMessage)
-                binding.recyclerViewMessages.scrollToPosition(chatAdapter.itemCount - 1)
-            } else {
-                // 👇 Ты можешь: либо отображать его в другом фрагменте/чате, либо показать уведомление
-                Timber.tag(TAG).w("Message received from other peer ($sender), not active chat ($recipientUserId)")
-                // chatCache.saveMessageForLater(sender, receivedMessage)
-            }
-        }
-    }
-
-
-    override fun onError(target: String?, error: String) {
-        // Проверяем, относится ли ошибка к текущему чату или она общая
-        if (target == null || target == recipientUserId) {
-            Timber.tag(TAG).e("WebRTC Error (target: $target): $error")
-            // Показать ошибку пользователю (например, через Snackbar или Toast)
-            runOnUiThread {
-                // Пример:
-                com.google.android.material.snackbar.Snackbar.make(binding.root, "Ошибка WebRTC: $error", com.google.android.material.snackbar.Snackbar.LENGTH_LONG).show()
-                // Можно также обновить статус в Toolbar
-                supportActionBar?.subtitle = "Ошибка"
-            }
-        } else {
-            Timber.tag(TAG).e("Ignoring error for different target: $target, Error: $error")
-        }
-    }
-
-    override fun onDataChannelOpen(target: String) {
-        Timber.d("something really hoes wrong")
-    }
-
-    override fun onDataChannelStateChanged(
-        target: String,
-        newState: DataChannel.State
-    ) {
-        TODO("Not yet implemented")
     }
 }

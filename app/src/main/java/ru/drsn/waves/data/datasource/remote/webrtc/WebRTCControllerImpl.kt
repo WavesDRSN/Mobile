@@ -98,7 +98,6 @@ class WebRTCControllerImpl @Inject constructor(
         return peerConnections[peerId]?.signalingState()
     }
 
-
     private fun getOrCreatePeerConnection(peerId: PeerId): PeerConnection? {
         if (peerConnectionFactory == null) {
             Timber.tag(TAG).e("PeerConnectionFactory не инициализирована. Невозможно создать PeerConnection.")
