@@ -86,6 +86,7 @@ interface ICryptoRepository {
      * Проверяет, инициализирована ли криптосистема (ключи загружены или сгенерированы).
      */
     suspend fun isInitialized(): Boolean
+
     suspend fun saveUserNickname(nickname: String): Result<Unit, CryptoError>
     suspend fun getUserNickname(): Result<String, CryptoError>
     suspend fun deleteUserNickname(): Result<Unit, CryptoError>

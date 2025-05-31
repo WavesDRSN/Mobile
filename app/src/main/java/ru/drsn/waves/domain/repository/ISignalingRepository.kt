@@ -56,4 +56,5 @@ interface ISignalingRepository {
      * @return The username, or null if not connected/set.
      */
     fun getCurrentUsername(): String?
+    fun getCurrentOnlineUsers(): List<String>
 }

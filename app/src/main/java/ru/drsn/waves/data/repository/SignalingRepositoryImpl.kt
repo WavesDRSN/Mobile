@@ -28,6 +28,8 @@ class SignalingRepositoryImpl @Inject constructor(
         const val TAG = "SignalingRepository"
     }
 
+
+    private var usersList: List<String> = ArrayList<String>()
     private var currentUsername: String? = null
     // Собственный CoroutineScope для репозитория, чтобы управлять жизненным циклом подписок
     private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -77,7 +79,10 @@ class SignalingRepositoryImpl @Inject constructor(
     private fun mapServerEventToDomainEvent(serverEvent: SignalingServerEvent): SignalingEvent? {
         return when (serverEvent) {
             is SignalingServerEvent.ConnectionEstablished -> SignalingEvent.Connected
-            is SignalingServerEvent.UsersListReceived -> SignalingEvent.UserListUpdated(serverEvent.usersList.usersList)
+            is SignalingServerEvent.UsersListReceived -> {
+                usersList = serverEvent.usersList.usersList.toList().map { user -> user!!.name }
+                SignalingEvent.UserListUpdated(serverEvent.usersList.usersList)
+            }
             is SignalingServerEvent.SdpMessageReceived -> {
                 val sdpMsg = serverEvent.sdpMessage
                 when (sdpMsg.type.lowercase()) { // Приводим тип к нижнему регистру для надежности
@@ -180,4 +185,6 @@ class SignalingRepositoryImpl @Inject constructor(
             repositoryScope.launch { disconnect() }
         }
     }
+
+    override fun getCurrentOnlineUsers(): List<String> = usersList
 }

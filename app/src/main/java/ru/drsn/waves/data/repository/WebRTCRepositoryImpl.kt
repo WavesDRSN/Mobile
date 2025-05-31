@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -67,6 +68,7 @@ class WebRTCRepositoryImpl @Inject constructor(
             if (isInitialized) return Result.Success(Unit)
             val success = webRTCController.initializeFactory() // Предполагаем, что это не suspend
             return if (success) {
+                Timber.d("WebRTCRepo initialized")
                 isInitialized = true
                 Result.Success(Unit)
             } else {
@@ -126,14 +128,8 @@ class WebRTCRepositoryImpl @Inject constructor(
                 _webRTCEvents.emit(WebRTCEvent.DataChannelClosed(event.peerId))
             }
             is WebRTCControllerEvent.DataChannelMessageReceived -> {
-                // Преобразуем ByteArray в String (предполагаем UTF-8)
-                val messageString = try {
-                    String(event.message, StandardCharsets.UTF_8)
-                } catch (e: Exception) {
-                    Timber.tag(TAG).e(e, "Ошибка декодирования сообщения от ${event.peerId.value}")
-                    "Error decoding message"
-                }
-                _webRTCEvents.emit(WebRTCEvent.MessageReceived(event.peerId, messageString))
+
+                _webRTCEvents.emit(WebRTCEvent.BinaryMessageReceived(event.peerId, event.message))
             }
             is WebRTCControllerEvent.PeerConnectionError -> {
                 _webRTCEvents.emit(WebRTCEvent.ErrorOccurred(event.peerId, event.errorDescription))
@@ -242,10 +238,11 @@ class WebRTCRepositoryImpl @Inject constructor(
             return Result.Error(error)
         }
         Timber.tag(TAG).d("Отправка сообщения пиру ${message.peerId.value}: ${message.content.take(50)}...")
+
         val success = webRTCController.sendMessage(
             message.peerId,
             WebRTCControllerImpl.DATA_CHANNEL_LABEL, // Используем стандартную метку
-            message.content.toByteArray(StandardCharsets.UTF_8)
+            message.contentBytes!!
         )
         return if (success) {
             Result.Success(Unit)

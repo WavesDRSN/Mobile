@@ -19,6 +19,7 @@ class AuthenticationRepositoryImpl @Inject constructor(
     // DataSource должен сам управлять своим состоянием или принимать параметры соединения.
     // Если нужно явное открытие/закрытие - сделать UseCase для этого, который дергает DataSource.
 
+
     init {
         if (!remoteDataSource.isConnected()) remoteDataSource.setupConnection("tt.vld.su", 50051)
     }
