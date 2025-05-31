@@ -60,6 +60,19 @@ android {
 }
 
 dependencies {
+    
+    implementation(libs.androidx.room.runtime)
+    ksp(libs.androidx.room.compiler)
+    annotationProcessor(libs.androidx.room.compiler)
+    implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.room.rxjava2)
+    implementation(libs.androidx.room.rxjava3)
+    implementation(libs.androidx.room.guava)
+    testImplementation(libs.androidx.room.testing)
+    implementation(libs.androidx.room.paging)
+
+    implementation(libs.google.gson)
+
     implementation(libs.hilt.android)
     implementation(libs.androidx.material3.android) // Используйте последнюю версию
     ksp(libs.hilt.compiler) // или kapt для kapt
@@ -90,6 +103,7 @@ dependencies {
     // Логирование
 
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.timber)
