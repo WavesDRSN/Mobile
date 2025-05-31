@@ -24,20 +24,38 @@ class WelcomeViewModel @Inject constructor(
     private val _event = MutableSharedFlow<WelcomeEvent>()
     val event = _event.asSharedFlow() // Activity подписывается на этот Flow
 
-    // Пример функции, вызываемой из Activity при нажатии кнопки "Вход"
     fun onLoginClicked() {
         // Здесь может быть логика (валидация, вызов use case и т.д.)
         viewModelScope.launch {
             // Отправляем событие для навигации
-            //_event.emit(WelcomeEvent.NavigateToLogin)
+            _event.emit(WelcomeEvent.NavigateToLogin)
         }
     }
 
-    // Пример функции, вызываемой из Activity при нажатии кнопки "Регистрация"
     fun onRegistrationClicked() {
         viewModelScope.launch {
-            //_event.emit(WelcomeEvent.NavigateToRegistration)
+            _event.emit(WelcomeEvent.NavigateToRegistration)
         }
+    }
+
+    /**
+     * Обрабатывает данные, переданные из LauncherActivity.
+     * @param showError Показать ли ошибку.
+     * @param errorMessage Сообщение об ошибке.
+     */
+    fun processLaunchError(showError: Boolean, errorMessage: String?) {
+        if (showError && errorMessage != null) {
+            _uiState.value = WelcomeUiState.ShowAuthFailureDialog(errorMessage)
+        } else {
+            _uiState.value = WelcomeUiState.Initial // Если ошибки нет, просто начальное состояние
+        }
+    }
+
+    /**
+     * Вызывается, когда диалог ошибки был закрыт пользователем.
+     */
+    fun onErrorDialogDismissed() {
+        _uiState.value = WelcomeUiState.Initial // Возвращаемся в начальное состояние
     }
 
     // Можно добавить другие функции для обработки действий пользователя

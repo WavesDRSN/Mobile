@@ -5,4 +5,22 @@
     <string name="welcomeWeDontUsePasswordsMessage">Мы не используем пароли — только ваше устройство сможет авторизоваться</string>
     <string name="goToRegistrationButtonText">Регистрация</string>
     <string name="goToLoggingInButtonText">Вход</string>
+    <string name="hint_type_message">вводи сообщение гавнюк</string>
+    <string name="title_main_chats">Чаты</string>
+    <string name="bottom_nav_chats">Чаты</string>
+    <string name="bottom_nav_calls">Звонки</string>
+    <string name="bottom_nav_profile">Профиль</string>
+    <string name="search_messages_hint">Поиск</string>
+    <string name="profile_clicked_toast">нажмато на профиль</string>
+    <string name="toolbar_profile">Профиль</string>
+    <string name="navigation_drawer_open">drawer open\n</string>
+    <string name="navigation_drawer_close">drwaer closed</string>
+    <string name="registration">Регистрация</string>
+    <string name="about_login_registration">Логин будет использоваться для поиска вас в системе.</string>
+    <string name="nickname_input_hint">Выберите логин</string>
+    <string name="terms_of_use">Я согласен с Условиями использования</string>
+    <string name="continue_text">Продолжить</string>
+    <string name="from_registration_to_logging">Уже зарегистрированы? Войти</string>
+    <string name="mnemonic_verification_input_hint">Введите первые три слова через пробел</string>
+    <string name="back_text">Назад</string>
 </resources>

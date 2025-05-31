@@ -12,3 +12,4 @@ class ConnectToSignalingUseCase @Inject constructor(
         return signalingRepository.connect(username, host, port)
     }
 }
+

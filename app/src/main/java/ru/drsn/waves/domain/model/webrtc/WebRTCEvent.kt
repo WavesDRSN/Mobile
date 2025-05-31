@@ -5,6 +5,23 @@ import org.webrtc.PeerConnection
 sealed class WebRTCEvent {
     data class SessionStateChanged(val peerId: PeerId, val state: PeerConnection.IceConnectionState) : WebRTCEvent() // Более детальное состояние
     data class MessageReceived(val peerId: PeerId, val message: String) : WebRTCEvent()
+
+    data class BinaryMessageReceived(val peerId: PeerId, val message: ByteArray) : WebRTCEvent() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+            other as BinaryMessageReceived
+            if (peerId != other.peerId) return false
+            if (!message.contentEquals(other.message)) return false
+            return true
+        }
+        override fun hashCode(): Int {
+            var result = peerId.hashCode()
+            result = 31 * result + message.contentHashCode()
+            return result
+        }
+    }
+
     data class DataChannelOpened(val peerId: PeerId) : WebRTCEvent()
     data class DataChannelClosed(val peerId: PeerId) : WebRTCEvent()
     data class ErrorOccurred(val peerId: PeerId?, val error: String) : WebRTCEvent() // Может быть общая ошибка или для конкретного пира
