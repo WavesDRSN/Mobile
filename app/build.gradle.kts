@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.google.dagger.hilt)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.google.gms.services)
 }
 
 kotlin {
@@ -34,9 +35,6 @@ android {
             )
         }
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.3"
-    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
@@ -47,7 +45,6 @@ android {
     buildFeatures {
         viewBinding = true
         buildConfig = true
-        compose = true
     }
     buildTypes {
         release {
@@ -60,7 +57,7 @@ android {
 }
 
 dependencies {
-    
+
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)
     annotationProcessor(libs.androidx.room.compiler)
@@ -117,6 +114,12 @@ dependencies {
 
     //webrtc
     implementation(libs.stream.webrtc.android)
+
+    // Firebase уведомления
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+
 }
 
 
