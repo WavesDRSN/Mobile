@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -7,52 +8,96 @@
     android:layout_height="match_parent"
     tools:context=".ui.chat.ChatActivity">
 
-    <androidx.appcompat.widget.Toolbar
-        android:id="@+id/toolbarChat"
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBarLayoutChat"
         android:layout_width="0dp"
-        android:layout_height="?attr/actionBarSize" android:background="?attr/colorPrimary" android:elevation="4dp" android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar" app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
+        android:layout_height="wrap_content"
         app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/toolbarChat"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="?attr/colorPrimary"
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
+            tools:title="Имя Собеседника" />
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/messagesRecyclerView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:paddingBottom="8dp"
+        android:clipToPadding="false"
+        app:layout_constraintTop_toBottomOf="@id/appBarLayoutChat"
+        app:layout_constraintBottom_toTopOf="@+id/inputLayout"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:listitem="@layout/list_item_message_sent" />
+
+    <View
+        android:id="@+id/inputDivider"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:background="?android:attr/listDivider"
+        app:layout_constraintBottom_toTopOf="@+id/inputLayout"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
     <LinearLayout
-        android:id="@+id/layoutInputArea"
+        android:id="@+id/inputLayout"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="8dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:gravity="center_vertical"
         android:background="?android:attr/windowBackground"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <EditText
-            android:id="@+id/editTextMessageInput"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="Введите сообщение..."
-            android:inputType="text|textMultiLine|textCapSentences" android:maxLines="5"
-            android:layout_marginEnd="8dp"/>
-
-        <Button
-            android:id="@+id/buttonSendMessage"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Отпр"/>
-
-    </LinearLayout>
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerViewMessages"
+        <ImageButton
+            android:id="@+id/attachButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_gallery" /> <EditText
+        android:id="@+id/messageEditText"
         android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@id/toolbarChat" app:layout_constraintBottom_toTopOf="@id/layoutInputArea"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:hint="@string/hint_type_message"
+        android:inputType="textMultiLine|textCapSentences"
+        android:maxLines="5"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:background="@android:color/transparent"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"/>
+        <ImageButton
+            android:id="@+id/sendButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_send" /> </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/progressBarChat"
+        style="?android:attr/progressBarStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="@id/messagesRecyclerView"
+        app:layout_constraintBottom_toBottomOf="@id/messagesRecyclerView"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:paddingBottom="8dp"
-        android:clipToPadding="false"
-        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-        tools:listitem="@layout/item_message_received"/>
+        tools:visibility="visible"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

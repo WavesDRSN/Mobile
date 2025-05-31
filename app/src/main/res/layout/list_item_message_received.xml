@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingStart="8dp"
+    android:paddingEnd="64dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
+
+    <ImageView
+        android:id="@+id/avatarImageViewReceived"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_gravity="bottom"
+        android:layout_marginEnd="8dp"
+        android:src="@drawable/ic_default_avatar"
+        tools:visibility="visible"
+        android:visibility="gone"/> <LinearLayout
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="start"
+    android:background="@drawable/bg_message_received" android:orientation="vertical"
+    android:paddingStart="12dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:id="@+id/senderNameTextReceived"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:text="Имя Отправителя"
+        android:textColor="?attr/colorPrimary"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:visibility="gone" /> <TextView
+    android:id="@+id/messageTextReceived"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    tools:text="Это входящее сообщение от другого пользователя."
+    android:textColor="?android:attr/textColorPrimary"
+    android:textSize="16sp" />
+
+    <TextView
+        android:id="@+id/timestampTextReceived"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:layout_marginTop="4dp"
+        tools:text="10:30"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="12sp" />
+</LinearLayout>
+</LinearLayout>
+
