@@ -2,6 +2,7 @@ package ru.drsn.waves.data.datasource.remote.grpc.authentication
 
 import com.google.protobuf.ByteString
 import gRPC.v1.Authentication.ChallengeResponse
+import gRPC.v1.Authentication.UpdateTokenRequest
 import io.grpc.StatusRuntimeException
 import java.io.IOException
 import javax.inject.Inject
@@ -85,18 +86,36 @@ class AuthenticationRemoteDataSourceImpl @Inject constructor(
     ): AuthenticationResponseDto {
         try {
             // Адаптируй вызов под твой gRPC метод authenticate, передавая нужные параметры
-            // Предполагаем, что gRPC метод authenticate возвращает AuthenticateResponse с полями success, errorMessage, jwtToken
+            // Предполагаем, что gRPC метод authenticate возвращает AuthenticateResponse с полями success, errorMessage, jwtToken, userId
             val response = getClient().authenticate(nickname, challengeResponse, signature) // Пример вызова
 
             return AuthenticationResponseDto(
                 success = response.success,
                 errorMessage = response.errorMessage.takeIf { it.isNotEmpty() },
-                jwtToken = response.token.takeIf { it.isNotEmpty() }
+                jwtToken = response.token.takeIf { it.isNotEmpty() },
+                userId = response.userId.takeIf { it.isNotEmpty() }
             )
         } catch (e: StatusRuntimeException) {
             throw mapGrpcError(e)
         } catch (e: Exception) {
             throw IOException("Network error during authenticate", e)
+        }
+    }
+
+    override suspend fun updateFcmToken(fcmToken: String): UpdateTokenResponseDto { // <--- НОВЫЙ МЕТОД
+        try {
+            val request = UpdateTokenRequest.newBuilder()
+                .setFcmToken(fcmToken)
+                .build()
+            val response = getClient().updateFcmToken(fcmToken)
+            return UpdateTokenResponseDto(
+                success = response.success,
+                errorMessage = response.errorMessage.takeIf { it.isNotEmpty() }
+            )
+        } catch (e: StatusRuntimeException) {
+            throw mapGrpcError(e)
+        } catch (e: Exception) {
+            throw IOException("Network error during updateFcmToken: ${e.message}", e)
         }
     }
 
