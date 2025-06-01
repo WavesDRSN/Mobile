@@ -8,4 +8,5 @@ sealed class AuthError {
     data object ConnectionError : AuthError()
     data class SigningError(val cause: Throwable?) : AuthError()
     data class Unknown(val message: String?, val cause: Throwable? = null) : AuthError()
+    data class FcmError(val message: String?) : AuthError()
 }
