@@ -23,10 +23,15 @@ class WebRTCControllerImpl @Inject constructor(
     companion object {
         const val TAG = "WebRTCController"
         const val DATA_CHANNEL_LABEL = "chat" // Стандартная метка для основного канала данных
+        const val AUDIO_TRACK_ID = "ARDAMSa0" // Стандартный ID для аудио трека WebRTC
+        const val LOCAL_STREAM_ID = "ARDAMSs0" // Стандартный ID для локального медиапотока
     }
 
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default) // Scope для операций контроллера
     private var peerConnectionFactory: PeerConnectionFactory? = null
+
+    private var localAudioSources = ConcurrentHashMap<PeerId, AudioSource>()
+    private var localAudioTracks = ConcurrentHashMap<PeerId, AudioTrack>()
 
     // Настройки ICE серверов
     private val iceServers: List<PeerConnection.IceServer> = listOf(
@@ -38,11 +43,6 @@ class WebRTCControllerImpl @Inject constructor(
             .createIceServer()
     )
 
-    // Ограничения для SDP по умолчанию (для DataChannel-only)
-    // private val defaultSdpConstraints = MediaConstraints().apply { // Передаются как параметр теперь
-    //     mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
-    //     mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
-    // }
 
     // Хранилища для активных соединений и каналов
     // ConcurrentHashMap для потокобезопасности
@@ -98,7 +98,7 @@ class WebRTCControllerImpl @Inject constructor(
         return peerConnections[peerId]?.signalingState()
     }
 
-    private fun getOrCreatePeerConnection(peerId: PeerId): PeerConnection? {
+    private fun getOrCreatePeerConnection(peerId: PeerId, mediaConstraints : MediaConstraints): PeerConnection? {
         if (peerConnectionFactory == null) {
             Timber.tag(TAG).e("PeerConnectionFactory не инициализирована. Невозможно создать PeerConnection.")
             controllerScope.launch { _controllerEvents.emit(WebRTCControllerEvent.PeerConnectionError(peerId, "PeerConnectionFactory not initialized")) }
@@ -196,11 +196,26 @@ class WebRTCControllerImpl @Inject constructor(
                 // В простом чате может не требоваться, но для более сложных сценариев здесь нужно создавать новый оффер
             }
 
-            override fun onAddTrack(receiver: RtpReceiver?, mediaStreams: Array<out MediaStream>?) { /* Не используется */ }
+            override fun onAddTrack(receiver: RtpReceiver?, mediaStreams: Array<out MediaStream>?) {
+                super.onAddTrack(receiver, mediaStreams)
+                receiver?.track()?.let { track ->
+                    if (track.kind() == MediaStreamTrack.AUDIO_TRACK_KIND) {
+                        Timber.tag(TAG).d("[${peerId.value}] Remote AudioTrack added.")
+                        // Для аудио трека обычно не нужно ничего делать с UI, он просто начинает воспроизводиться.
+                        // Но мы можем уведомить об этом.
+                    }
+                }
+            }
         }
 
         val connection = peerConnectionFactory!!.createPeerConnection(rtcConfig, observer)
         return if (connection != null) {
+            if (mediaConstraints.mandatory.any { it.key == "OfferToReceiveAudio" && it.value == "true" } ||
+                mediaConstraints.mandatory.any {it.key == "OfferToReceiveVideo" && it.value == "false"}) { // Проверка, что это не видеозвонок
+
+                createAndAddLocalAudioTrack(connection, peerId, mediaConstraints) // mediaConstraints могут содержать настройки AEC, NS, AGC
+            }
+
             peerConnections[peerId] = connection
             Timber.tag(TAG).i("[${peerId.value}] PeerConnection успешно создан.")
             connection
@@ -256,7 +271,7 @@ class WebRTCControllerImpl @Inject constructor(
 
     override suspend fun createOffer(peerId: PeerId, sdpConstraints: MediaConstraints) {
         withContext(Dispatchers.Default) { // Операции WebRTC могут быть CPU-bound
-            val peerConnection = getOrCreatePeerConnection(peerId) ?: return@withContext
+            val peerConnection = getOrCreatePeerConnection(peerId, sdpConstraints) ?: return@withContext
             Timber.tag(TAG).i("[${peerId.value}] Создание Offer...")
 
             // Создаем DataChannel ДО создания Offer, если это инициирующая сторона
@@ -307,7 +322,7 @@ class WebRTCControllerImpl @Inject constructor(
 
     override suspend fun handleRemoteOfferAndCreateAnswer(peerId: PeerId, remoteOffer: SessionDescription, sdpConstraints: MediaConstraints) {
         withContext(Dispatchers.Default) {
-            val peerConnection = getOrCreatePeerConnection(peerId) ?: return@withContext
+            val peerConnection = getOrCreatePeerConnection(peerId, sdpConstraints) ?: return@withContext
             Timber.tag(TAG).i("[${peerId.value}] Обработка удаленного Offer и создание Answer...")
 
             val setRemoteOfferObserver = DelegatingSdpObserver(
@@ -414,6 +429,37 @@ class WebRTCControllerImpl @Inject constructor(
         }
     }
 
+    override fun setLocalAudioEnabled(peerId: PeerId, enabled: Boolean): Boolean {
+        val audioTrack = localAudioTracks[peerId]
+        return if (audioTrack != null) {
+            audioTrack.setEnabled(enabled)
+            Timber.tag(TAG).d("[${peerId.value}] Local audio track setEnabled: $enabled")
+            true
+        } else {
+            Timber.tag(TAG).w("[${peerId.value}] Local audio track not found for setEnabled.")
+            false
+        }
+    }
+
+    // Вспомогательный метод для создания и добавления локального аудио трека
+    private fun createAndAddLocalAudioTrack(pc: PeerConnection, peerId: PeerId, audioProcessingConstraints: MediaConstraints) {
+        // Создаем AudioSource с учетом ограничений (AEC, NS, AGC)
+        val audioSource = peerConnectionFactory?.createAudioSource(audioProcessingConstraints)
+        localAudioSources[peerId] = audioSource as AudioSource
+
+        val audioTrack = peerConnectionFactory?.createAudioTrack(AUDIO_TRACK_ID, audioSource)
+        audioTrack?.setEnabled(true) // Включен по умолчанию
+        localAudioTracks[peerId] = audioTrack as AudioTrack
+
+        // Добавляем трек в PeerConnection. Для этого обычно создается локальный MediaStream.
+        val localStream = peerConnectionFactory!!.createLocalMediaStream(LOCAL_STREAM_ID)
+        localStream.addTrack(audioTrack)
+        pc.addStream(localStream) // Устаревший метод, но всё ещё работает
+        // или pc.addTrack(audioTrack, listOf(LOCAL_STREAM_ID)) // Для Unified Plan
+
+        Timber.tag(TAG).d("[${peerId.value}] Local AudioTrack created and added.")
+    }
+
     override suspend fun sendMessage(peerId: PeerId, dataChannelLabel: String, message: ByteArray): Boolean {
         return withContext(Dispatchers.IO) { // Отправка данных - IO операция
             val dataChannel = dataChannels[peerId] // Предполагаем, что метка всегда одна для простоты
@@ -454,6 +500,8 @@ class WebRTCControllerImpl @Inject constructor(
                 it.close() // Закрывает PeerConnection и связанные ресурсы
                 Timber.tag(TAG).d("[${peerId.value}] PeerConnection закрыт.")
             }
+            localAudioTracks.remove(peerId)?.dispose()
+            localAudioSources.remove(peerId)?.dispose()
             pendingIceCandidates.remove(peerId)
             Timber.tag(TAG).w("[${peerId.value}] Ресурсы соединения освобождены.")
             // Эмитим событие, что соединение было закрыто (если не было эмитировано ранее через onIceConnectionChange)
@@ -469,6 +517,8 @@ class WebRTCControllerImpl @Inject constructor(
                 closeConnection(peerId) // Используем уже существующий метод закрытия
             }
             peerConnections.clear()
+            localAudioTracks.clear()
+            localAudioSources.clear()
             dataChannels.clear()
             pendingIceCandidates.clear()
 

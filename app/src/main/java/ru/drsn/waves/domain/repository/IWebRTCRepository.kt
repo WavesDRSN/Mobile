@@ -1,6 +1,7 @@
 package ru.drsn.waves.domain.repository
 
 import kotlinx.coroutines.flow.Flow
+import org.webrtc.MediaConstraints
 import ru.drsn.waves.domain.model.signaling.IceCandidateData
 import ru.drsn.waves.domain.model.signaling.SdpData
 import ru.drsn.waves.domain.model.utils.Result
@@ -71,4 +72,12 @@ interface IWebRTCRepository {
      * Возвращает множество ID всех пиров, с которыми установлено или устанавливается соединение.
      */
     fun getActivePeers(): Set<PeerId>
+
+    suspend fun startCall(remoteUserId: String): Result<Unit, WebRTCError>
+    suspend fun onIncomingCall(offerSdp: String, fromUserId: String): Result<Unit, WebRTCError>
+    suspend fun acceptCall(): Result<Unit, WebRTCError>
+    suspend fun rejectCall(): Result<Unit, WebRTCError>
+    suspend fun onAnswerReceived(answerSdp: String): Result<Unit, WebRTCError>
+    suspend fun endCall(): Result<Unit, WebRTCError>
+
 }

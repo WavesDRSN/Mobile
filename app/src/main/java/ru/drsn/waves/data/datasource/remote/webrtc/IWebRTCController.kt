@@ -86,4 +86,13 @@ interface IWebRTCController {
      * Возвращает множество ID всех пиров, для которых существует PeerConnection.
      */
     fun getActivePeerIds(): Set<PeerId>
+
+    // НОВЫЕ МЕТОДЫ для управления аудио
+    /**
+     * Включает или выключает локальный аудиотрек для указанного соединения.
+     * @param peerId Идентификатор пира.
+     * @param enabled true для включения (unmute), false для выключения (mute).
+     * @return true, если операция успешна, false в противном случае.
+     */
+    fun setLocalAudioEnabled(peerId: PeerId, enabled: Boolean): Boolean
 }

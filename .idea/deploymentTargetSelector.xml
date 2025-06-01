@@ -2,25 +2,18 @@
 <project version="4">
   <component name="deploymentTargetSelector">
     <selectionStates>
-      <SelectionState runConfigName="app">
+      <SelectionState runConfigName="Waves.app">
         <option name="selectionMode" value="DIALOG" />
-        <DropdownSelection timestamp="2025-05-31T00:24:49.149242600Z">
-          <Target type="DEFAULT_BOOT">
-            <handle>
-              <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\User\.android\avd\Medium_Phone_API_36_2.avd" />
-            </handle>
-          </Target>
-        </DropdownSelection>
         <DialogSelection>
           <targets>
             <Target type="DEFAULT_BOOT">
               <handle>
-                <DeviceId pluginId="PhysicalDevice" identifier="serial=af5a22412baa" />
+                <DeviceId pluginId="LocalEmulator" identifier="path=D:\androidvirtuamachine\Pixel_9.avd" />
               </handle>
             </Target>
             <Target type="DEFAULT_BOOT">
               <handle>
-                <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\User\.android\avd\Medium_Phone_API_36.avd" />
+                <DeviceId pluginId="LocalEmulator" identifier="path=D:\androidvirtuamachine\Pixel_9_Pro.avd" />
               </handle>
             </Target>
           </targets>

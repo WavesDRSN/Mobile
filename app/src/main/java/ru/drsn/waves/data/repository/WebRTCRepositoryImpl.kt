@@ -4,8 +4,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.webrtc.IceCandidate
@@ -22,7 +22,6 @@ import ru.drsn.waves.domain.repository.ISignalingRepository
 import ru.drsn.waves.domain.repository.IWebRTCRepository
 import ru.drsn.waves.domain.model.utils.Result
 import timber.log.Timber
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -42,13 +41,17 @@ class WebRTCRepositoryImpl @Inject constructor(
 
     // Ограничения для SDP по умолчанию (для DataChannel-only)
     private val defaultSdpConstraints = MediaConstraints().apply {
-        mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
+        mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
         mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
     }
 
     // Мьютекс для синхронизации доступа к состоянию инициализации, если необходимо
     private val initializationMutex = Mutex()
     private var isInitialized = false
+
+    private var pendingOfferSdp: SessionDescription? = null
+    private var pendingCallerId: String? = null
+    private var currentPeerId: PeerId? = null
 
 
     init {
@@ -74,6 +77,91 @@ class WebRTCRepositoryImpl @Inject constructor(
             } else {
                 Result.Error(WebRTCError.InitializationFailed("Failed to initialize WebRTCController factory", null))
             }
+        }
+    }
+
+    override suspend fun startCall(remoteUserId: String): Result<Unit, WebRTCError> {
+        val peerId = PeerId(remoteUserId)
+        return try {
+            if (!isInitialized) initialize()
+            Timber.tag(TAG).i("Starting call to $remoteUserId")
+            webRTCController.createOffer(peerId, defaultSdpConstraints)
+            Result.Success(Unit)
+        } catch (e: Exception) {
+            Result.Error(WebRTCError.ConnectionSetupFailed(peerId,"Failed to start call: ${e.message}",e)
+            )
+        }
+    }
+
+    override suspend fun onIncomingCall(offerSdp: String, fromUserId: String): Result<Unit, WebRTCError> {
+        return try {
+            pendingCallerId = fromUserId
+            pendingOfferSdp = SessionDescription(SessionDescription.Type.OFFER, offerSdp)
+            Timber.tag(TAG).i("Incoming call from $fromUserId, offer saved")
+            Result.Success(Unit)
+        } catch (e: Exception) {
+            Result.Error(WebRTCError.Unknown( PeerId(fromUserId),"Failed to process incoming call",e)
+            )
+        }
+    }
+
+    override suspend fun acceptCall(): Result<Unit, WebRTCError> {
+        val callerId = pendingCallerId ?: return Result.Error(WebRTCError.OperationFailed(null, "No pending caller"))
+        val offer = pendingOfferSdp ?: return Result.Error(WebRTCError.OperationFailed(null, "No offer SDP"))
+        val peerId = PeerId(callerId)
+        return try {
+            if (!isInitialized) initialize()
+            webRTCController.handleRemoteOfferAndCreateAnswer(peerId, offer, defaultSdpConstraints)
+            pendingCallerId = null
+            pendingOfferSdp = null
+            currentPeerId = peerId
+            Result.Success(Unit)
+        } catch (e: Exception) {
+            Result.Error(WebRTCError.ConnectionSetupFailed(peerId, "Failed to accept call", e)
+            )
+        }
+    }
+
+    override suspend fun rejectCall(): Result<Unit, WebRTCError> {
+        val callerId = pendingCallerId ?: return Result.Error(
+            WebRTCError.OperationFailed(null, "No call to reject")
+        )
+        return try {
+            signalingRepository.sendCallRejected(callerId)
+            pendingCallerId = null
+            pendingOfferSdp = null
+            Result.Success(Unit)
+        } catch (e: Exception) {
+            Result.Error(WebRTCError.MessageSendFailed(PeerId(callerId),"Failed to send reject signal", e)
+            )
+        }
+    }
+
+    override suspend fun onAnswerReceived(answerSdp: String): Result<Unit, WebRTCError> {
+        val peerId = currentPeerId ?: return Result.Error(WebRTCError.SessionNotFound(PeerId("unknown")))
+        return try {
+            if (!isInitialized) initialize()
+            val answer = SessionDescription(SessionDescription.Type.ANSWER, answerSdp)
+            webRTCController.handleRemoteAnswer(peerId, answer)
+            Result.Success(Unit)
+        } catch (e: Exception) {
+            Result.Error(
+                WebRTCError.OperationFailed(peerId,"Failed to apply answer SDP",e
+                )
+            )
+        }
+    }
+
+    override suspend fun endCall(): Result<Unit, WebRTCError> {
+        val peerId = currentPeerId ?: return Result.Error(WebRTCError.SessionNotFound(PeerId("unknown")))
+        return try {
+            signalingRepository.sendCallEnded(peerId.value)
+            webRTCController.closeConnection(peerId)
+            currentPeerId = null
+            Result.Success(Unit)
+        } catch (e: Exception) {
+            Result.Error(WebRTCError.OperationFailed( peerId,"Failed to end call",e)
+            )
         }
     }
 
