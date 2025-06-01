@@ -17,6 +17,8 @@ interface IAuthenticationRepository {
     // Разделяем получение challenge и проверку аутентификации
     suspend fun getChallenge(nickname: String): Result<ChallengeResponse, AuthError>
 
+    suspend fun updateFcmToken(fcmToken: String): Result<Unit, AuthError>
+
     suspend fun verifyAuthentication(
         nickname: String,
         challengeResponse: ChallengeResponse,
