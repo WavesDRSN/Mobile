@@ -8,6 +8,7 @@ interface IAuthenticationRemoteDataSource {
     suspend fun register(reservationToken: String, publicKey: ByteString): RegistrationResponseDto // Замени RegistrationResponseDto
     suspend fun getChallenge(nickname: String): ChallengeResponse // Замени ChallengeResponseDto
     suspend fun authenticate(nickname: String, challengeResponse: ChallengeResponse, signature: ByteString): AuthenticationResponseDto // Замени ...Dto
+    suspend fun updateFcmToken(fcmToken: String): UpdateTokenResponseDto
     // Метод для установки соединения, если нужно управлять явно
     fun setupConnection(serverAddress: String, serverPort: Int)
     fun isConnected(): Boolean
