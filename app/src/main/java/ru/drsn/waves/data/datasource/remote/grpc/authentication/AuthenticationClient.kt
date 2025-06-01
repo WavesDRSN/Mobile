@@ -67,4 +67,13 @@ class AuthenticationClient (
         return response
     }
 
+    suspend fun updateFcmToken(fcmToken: String) : UpdateTokenResponse{
+        val request = UpdateTokenRequest.newBuilder()
+            .setFcmToken(fcmToken)
+            .build()
+
+        val response = stub.updateFcmToken(request)
+
+        return response
+    }
 }
