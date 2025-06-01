@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "gRPC.v1.Notification";
+option java_outer_classname = "NotificationProto";
+
+service NotificationService {
+  // Отправляет data-only уведомление конкретному устройству (через FCM токен)
+  // или в топик.
+  rpc SendNotification (NotificationRequest) returns (NotificationResponse);
+}
+
+// Запрос на отправку уведомления
+message NotificationRequest {
+  // Цель уведомления: либо конкретный FCM токен, либо топик.
+  oneof target {
+    string fcm_token = 1;   // FCM токен целевого устройства
+    string topic = 2;       // Имя топика для рассылки
+  }
+
+  // Полезная нагрузка уведомления
+  NotificationPayload payload = 3;
+}
+
+// Полезная нагрузка, содержащая только данные.
+// Клиентское приложение само решает, как отобразить уведомление
+// на основе event_type и сопутствующих данных.
+message NotificationPayload {
+  // Тип события, который поможет клиенту понять, что произошло.
+  // Например: "new_message", "incoming_call", "friend_request", "message_read"
+  string event_type = 1;
+
+  // Карта с дополнительными данными, специфичными для события.
+  // Ключи и значения - строки. Данные могут быть ID, именами, и т.д.
+  // Для чувствительных данных может потребоваться шифрование на уровне приложения (E2EE),
+  // если они передаются здесь.
+  map<string, string> data = 2;
+}
+
+// Ответ на запрос отправки уведомления
+message NotificationResponse {
+  // true, если FCM успешно принял сообщение для дальнейшей доставки.
+  // Не гарантирует, что сообщение будет доставлено до устройства.
+  bool success = 1;
+
+  // ID сообщения, присвоенный FCM (если success = true).
+  // Может быть полезен для отладки или отслеживания.
+  string message_id = 2;
+
+  // Сообщение об ошибке (если success = false).
+  // Более детальная информация об ошибке обычно логируется на сервере
+  // или передается через gRPC Status.
+  string error_message = 3;
+}
