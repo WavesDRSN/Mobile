@@ -95,4 +95,22 @@ class AuthenticationRepositoryImpl @Inject constructor(
             Result.Error(AuthError.Unknown("Failed to verify authentication", e))
         }
     }
+
+    override suspend fun updateFcmToken(fcmToken: String): Result<Unit, AuthError> {
+        return try {
+            val responseDto = remoteDataSource.updateFcmToken(fcmToken)
+            if (responseDto.success) {
+                Result.Success(Unit)
+            } else {
+                // Можно добавить специфическую ошибку для неудачного обновления токена
+                Result.Error(AuthError.FcmError(responseDto.errorMessage))
+            }
+        } catch (e: ConnectionException) {
+            Result.Error(AuthError.ConnectionError)
+        } catch (e: IOException) {
+            Result.Error(AuthError.ConnectionError)
+        } catch (e: Exception) {
+            Result.Error(AuthError.Unknown("Failed to update FCM token: ${e.message}", e))
+        }
+    }
 }
