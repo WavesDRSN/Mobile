@@ -90,6 +90,8 @@ class SignalingRepositoryImpl @Inject constructor(
                     "answer" -> SignalingEvent.SdpAnswerReceived(sdpMsg.sdp, sdpMsg.sender)
                     // Обработка вашего кастомного типа "new_peer"
                     "new_peer" -> SignalingEvent.NewPeerNotificationReceived(sdpMsg.sdp, sdpMsg.sender) // sdpMsg.sdp содержит newPeerId
+                    "call_rejected" -> SignalingEvent.CallRejected(sdpMsg.sender)
+                    "call_ended" -> SignalingEvent.CallEnded(sdpMsg.sender)
                     else -> {
                         Timber.tag(TAG).w("Получен неизвестный тип SDP: ${sdpMsg.type}")
                         null // Игнорируем неизвестные типы
@@ -168,6 +170,32 @@ class SignalingRepositoryImpl @Inject constructor(
             type = "new_peer",
             sdp = newPeerId, // ID нового пира здесь является "содержимым SDP"
             targetId = receiverId,
+            senderId = localUsername
+        )
+        return sendSdp(sdpData)
+    }
+
+    override suspend fun sendCallRejected(callerId: String): Result<Unit, SignalingError> {
+        val localUsername = currentUsername
+            ?: return Result.Error(SignalingError.NotConnected("Имя пользователя не установлено"))
+
+        val sdpData = SdpData(
+            type = "call_rejected",
+            sdp = "", // payload не нужен
+            targetId = callerId,
+            senderId = localUsername
+        )
+        return sendSdp(sdpData)
+    }
+
+    override suspend fun sendCallEnded(peerId: String): Result<Unit, SignalingError> {
+        val localUsername = currentUsername
+            ?: return Result.Error(SignalingError.NotConnected("Имя пользователя не установлено"))
+
+        val sdpData = SdpData(
+            type = "call_ended",
+            sdp = "", // payload не нужен
+            targetId = peerId,
             senderId = localUsername
         )
         return sendSdp(sdpData)

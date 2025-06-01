@@ -21,4 +21,7 @@ sealed class SignalingEvent {
     data object Connected : SignalingEvent()
     data object Disconnected : SignalingEvent()
     data class ConnectionErrorEvent(val error: SignalingError) : SignalingEvent()
+
+    data class CallRejected(val from: String) : SignalingEvent()
+    data class CallEnded(val from: String) : SignalingEvent()
 }

@@ -57,4 +57,7 @@ interface ISignalingRepository {
      */
     fun getCurrentUsername(): String?
     fun getCurrentOnlineUsers(): List<String>
+
+    suspend fun sendCallRejected(callerId: String): Result<Unit, SignalingError>
+    suspend fun sendCallEnded(peerId: String): Result<Unit, SignalingError>
 }
