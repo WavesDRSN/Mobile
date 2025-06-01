@@ -23,4 +23,19 @@
     <string name="from_registration_to_logging">Уже зарегистрированы? Войти</string>
     <string name="mnemonic_verification_input_hint">Введите первые три слова через пробел</string>
     <string name="back_text">Назад</string>
+    <string name="notification_channel_default_name">Основные уведомления</string>
+    <string name="notification_channel_default_description">Уведомления о новых сообщениях, запросах и других событиях.</string>
+    <string name="notification_channel_calls_name">Входящие звонки</string>
+    <string name="notification_channel_calls_description">Уведомления о входящих звонках.</string>
+    <string name="notification_default_body">У вас новое уведомление.</string>
+    <string name="notification_new_message_title">Новое сообщение</string>
+    <string name="notification_new_message_body_default">Вам пришло новое сообщение.</string>
+    <string name="notification_incoming_call_title">Входящий звонок</string>
+    <string name="notification_incoming_call_from">Звонок от</string>
+    <string name="unknown_caller">Неизвестный абонент</string>
+    <string name="notification_contact_request_title">Запрос в контакты</string>
+    <string name="someone">Кто-то</string>
+    <string name="notification_contact_request_body_suffix">хочет добавить вас в контакты.</string>
+    <string name="notification_generic_body">У вас новое уведомление.</string>
+    <string name="notification_unknown_event_type">Неизвестное событие</string>
 </resources>
