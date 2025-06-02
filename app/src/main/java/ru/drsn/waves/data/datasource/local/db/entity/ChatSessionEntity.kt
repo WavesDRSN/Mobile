@@ -24,12 +24,16 @@ data class ChatSessionEntity(
 
     @ColumnInfo(name = "peer_description")
     var peerDescription: String? = null,
+
+    @ColumnInfo(name = "last_known_peer_profile_timestamp") // НОВОЕ ПОЛЕ
+    var lastKnownPeerProfileTimestamp: Long? = null, // Когда мы в последний раз получили/отправили профиль этого пира
+
     @ColumnInfo(name = "last_message_id")
-    val lastMessageId: String? = null,
+    var lastMessageId: String? = null, // Сделаем var для обновления
     @ColumnInfo(name = "last_message_timestamp")
-    val lastMessageTimestamp: Long = 0L,
+    var lastMessageTimestamp: Long = 0L, // Сделаем var
     @ColumnInfo(name = "unread_messages_count")
-    val unreadMessagesCount: Int = 0,
+    var unreadMessagesCount: Int = 0, // Сделаем var
     @ColumnInfo(name = "is_archived")
     val isArchived: Boolean = false,
     @ColumnInfo(name = "is_muted")

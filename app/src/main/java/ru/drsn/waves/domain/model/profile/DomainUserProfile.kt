@@ -11,5 +11,6 @@ data class DomainUserProfile(
     val userId: String, // Никнейм
     val displayName: String,
     val statusMessage: String?,
+    val lastLocalEditTimestamp: Long,
     val avatarUri: String? // Может быть локальным URI или удаленным URL
 )

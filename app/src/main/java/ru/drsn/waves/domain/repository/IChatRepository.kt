@@ -116,9 +116,18 @@ interface IChatRepository {
         sessionId: String,
         newPeerName: String,
         newPeerDescription: String?,
-        newPeerAvatarUrl: String?
+        newPeerAvatarUrl: String?,
+        profileTimestamp: Long? // НОВЫЙ ПАРАМЕТР
     ): Result<Unit, ChatError>
 
     suspend fun getSessionInfo(sessionId: String): Result<DomainUserProfile, ChatError>
+
+    /**
+     * Отправляет информацию о профиле текущего пользователя указанному пиру.
+     * Если профиль содержит локальный аватар, инициирует его P2P передачу.
+     * @param targetPeerId ID пира-получателя.
+     * @param profile Данные профиля текущего пользователя для отправки.
+     */
+    suspend fun sendMyProfileInfoToPeer(targetPeerId: String, profile: DomainUserProfile): Result<Unit, ChatError>
 }
 

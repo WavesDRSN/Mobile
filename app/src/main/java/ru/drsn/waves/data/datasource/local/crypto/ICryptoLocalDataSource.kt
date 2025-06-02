@@ -54,4 +54,6 @@ interface ICryptoLocalDataSource {
         keystoreWrappingKeyAlias: String
     ): ByteArray?
 
+    suspend fun loadProfileLastEditTimestamp(): Long?
+    suspend fun saveProfileLastEditTimestamp(timestamp: Long): Boolean
 }

@@ -20,8 +20,10 @@ import ru.drsn.waves.domain.model.p2p.UserProfilePayload
 import ru.drsn.waves.domain.model.webrtc.PeerId
 import ru.drsn.waves.domain.model.webrtc.WebRTCMessage
 import ru.drsn.waves.domain.repository.IWebRTCRepository
+import ru.drsn.waves.domain.usecase.chat.SendMyProfileInfoToPeerUseCase
 import ru.drsn.waves.domain.usecase.profile.LoadUserProfileUseCase // Новый UseCase
 import ru.drsn.waves.domain.usecase.profile.SaveUserProfileUseCase // Новый UseCase
+import ru.drsn.waves.domain.usecase.webrtc.GetActiveWebRTCPeersUseCase
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
@@ -42,7 +44,9 @@ data class EditProfileScreenState(
 @HiltViewModel
 class EditProfileViewModel @Inject constructor(
     private val loadUserProfileUseCase: LoadUserProfileUseCase,
-    private val saveUserProfileUseCase: SaveUserProfileUseCase
+    private val saveUserProfileUseCase: SaveUserProfileUseCase,
+    private val sendMyProfileInfoToPeerUseCase: SendMyProfileInfoToPeerUseCase,
+    private val getActiveWebRTCPeersUseCase: GetActiveWebRTCPeersUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EditProfileScreenState())
@@ -67,6 +71,7 @@ class EditProfileViewModel @Inject constructor(
                             avatarUri = profile.avatarUri
                         )
                     }
+
                 }
                 is Result.Error -> {
                     Timber.e("Не удалось загрузить профиль: ${profileResult.error}")
@@ -146,15 +151,18 @@ class EditProfileViewModel @Inject constructor(
                 userId = currentState.currentUserId,
                 displayName = currentState.displayName,
                 statusMessage = currentState.statusMessage.ifBlank { null }, // Сохраняем null, если пустая строка
-                avatarUri = currentState.avatarUri?.ifBlank { null }
+                avatarUri = currentState.avatarUri?.ifBlank { null },
+                lastLocalEditTimestamp = System.currentTimeMillis()
             )
 
             when (val saveResult = saveUserProfileUseCase(profileToSave)) {
                 is Result.Success -> {
                     _uiState.update { it.copy(isLoading = false, saveSuccess = true) }
                     Timber.i("Профиль успешно сохранен (локально).")
-                    // Опционально: отправить обновление профиля другим пирам
-                    //sendProfileUpdateToPeers(profileToSave)
+                    val peers = getActiveWebRTCPeersUseCase()
+                    for (peer: PeerId in peers) {
+                        sendMyProfileInfoToPeerUseCase(peer.value, profileToSave)
+                    }
                 }
                 is Result.Error -> {
                     _uiState.update { it.copy(isLoading = false, error = "Ошибка сохранения профиля: ${saveResult.error}") }

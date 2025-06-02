@@ -33,6 +33,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
         private const val KEY_PROFILE_DISPLAY_NAME = "profile_display_name"
         private const val KEY_PROFILE_STATUS_MESSAGE = "profile_status_message"
         private const val KEY_PROFILE_AVATAR_URI = "profile_avatar_uri"
+        private const val KEY_PROFILE_LAST_EDIT_TIMESTAMP = "profile_last_edit_timestamp"
 
         private const val AUTH_TOKEN_KEY = "auth_jwt_token"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
@@ -127,15 +128,30 @@ class CryptoLocalDataSourceImpl @Inject constructor(
         try { profileSharedPreferences.getString(KEY_PROFILE_AVATAR_URI, null) }
         catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка загрузки avatarUri"); null }
     }
+    override suspend fun saveProfileLastEditTimestamp(timestamp: Long): Boolean = withContext(Dispatchers.IO) {
+        try { profileSharedPreferences.edit().putLong(KEY_PROFILE_LAST_EDIT_TIMESTAMP, timestamp).apply(); true }
+        catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка сохранения lastEditTimestamp"); false }
+    }
+    override suspend fun loadProfileLastEditTimestamp(): Long? = withContext(Dispatchers.IO) {
+        try {
+            if (profileSharedPreferences.contains(KEY_PROFILE_LAST_EDIT_TIMESTAMP)) {
+                profileSharedPreferences.getLong(KEY_PROFILE_LAST_EDIT_TIMESTAMP, 0L)
+            } else {
+                null
+            }
+        } catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка загрузки lastEditTimestamp"); null }
+    }
+
     override suspend fun clearUserProfileData(): Boolean = withContext(Dispatchers.IO) {
         try {
             profileSharedPreferences.edit()
                 .remove(KEY_PROFILE_DISPLAY_NAME)
                 .remove(KEY_PROFILE_STATUS_MESSAGE)
                 .remove(KEY_PROFILE_AVATAR_URI)
+                .remove(KEY_PROFILE_LAST_EDIT_TIMESTAMP) // Очищаем и timestamp
                 .apply()
             true
-        } catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка очистки данных профиля"); false }
+        } catch (e: Exception) { false }
     }
 
     override suspend fun wrapDataWithKeystoreKey(dataToWrap: ByteArray, keystoreWrappingKeyAlias: String): ByteArray? = withContext(Dispatchers.IO) {

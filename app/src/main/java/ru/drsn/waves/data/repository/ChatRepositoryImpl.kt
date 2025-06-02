@@ -1,5 +1,6 @@
 package ru.drsn.waves.data.repository
 
+import android.content.ContentResolver
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
@@ -47,6 +48,8 @@ import ru.drsn.waves.domain.repository.IWebRTCRepository // Для отправ�
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -70,13 +73,13 @@ class ChatRepositoryImpl @Inject constructor(
         const val CHUNK_SIZE_BYTES = 16 * 1024 // 16KB
         const val MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 // 25 MB
         const val MEDIA_SUBDIR = "chat_media"
+        const val AVATARS_SUBDIR = "avatars" // Подпапка для аватаров
         const val INCOMING_TEMP_SUBDIR = "incoming_files_temp"
         const val MAX_PREVIEW_LENGTH = 50
     }
 
     private val pendingP2pEnvelopesQueue = ConcurrentHashMap<String, MutableList<P2pEnvelopeQueueItem>>()
 
-    private val pendingMessagesQueue = ConcurrentHashMap<String, MutableList<QueuedMessage>>()
     private val queueMutex = Mutex()
     private val repositoryScope = CoroutineScope(SupervisorJob() + defaultDispatcher)
     private var currentUserId = ""
@@ -84,7 +87,7 @@ class ChatRepositoryImpl @Inject constructor(
 
     private val activeOutgoingFileTransfers = ConcurrentHashMap<String, Job>()
     private val incomingFileStreams = ConcurrentHashMap<String, FileOutputStream>() // key: fileTransferId
-    private val incomingFileMetadataStore = ConcurrentHashMap<String, EnhancedMediaMetadata>() // key: fileTransferId
+    private val incomingFileMetadataStore = ConcurrentHashMap<String, Any>() // key: fileTransferId
 
     private data class P2pEnvelopeQueueItem(
         val p2pEnvelopeJson: String,
@@ -115,8 +118,13 @@ class ChatRepositoryImpl @Inject constructor(
                 .filterIsInstance<WebRTCEvent.DataChannelOpened>()
                 .collect { event ->
                     Timber.tag(TAG).d("DataChannel открыт для пира: ${event.peerId.value}. Проверка очереди...")
-                    Timber.tag(TAG).d("DataChannel открыт для пира: ${event.peerId.value}. Отправка профиля...")
 
+
+                    val userProfileResult = cryptoRepository.loadUserProfile()
+                    if (userProfileResult is Result.Success) {
+                        Timber.tag(TAG).d("DataChannel открыт для пира: ${event.peerId.value}. Отправка профиля...")
+                        sendMyProfileInfoToPeer(event.peerId.value, userProfileResult.value)
+                    }
                     sendPendingP2pEnvelopesForPeer(event.peerId.value)
                 }
         }
@@ -142,8 +150,23 @@ class ChatRepositoryImpl @Inject constructor(
                 if (chatPayload != null) {
                     saveIncomingChatMessage(envelope, chatPayload, sourcePeerId)
                 } else {
-                    /* ... ошибка ... */
                 }
+            }
+            P2pMessageType.USER_PROFILE_INFO -> {
+                val profilePayload = P2pMessageSerializer.deserializePayload<UserProfilePayload>(envelope.payload)
+                if (profilePayload != null && profilePayload.userId == envelope.senderId) {
+                    Timber.tag(TAG).i("Получена информация о профиле для ${profilePayload.userId} от ${envelope.senderId} (timestamp: ${envelope.timestamp})")
+                    updateChatSessionProfileInfo(
+                        sessionId = envelope.senderId,
+                        newPeerName = profilePayload.displayName,
+                        newPeerDescription = profilePayload.statusMessage,
+                        newPeerAvatarUrl = profilePayload.avatarRemoteUrl, // Сначала используем URL
+                        profileTimestamp = envelope.timestamp // Передаем timestamp полученного профиля
+                    )
+                    if (profilePayload.avatarFileId != null && profilePayload.avatarFileName != null) {
+                        incomingFileMetadataStore[profilePayload.avatarFileId] = profilePayload
+                    }
+                } else { /* ... ошибка ... */ }
             }
             P2pMessageType.FILE_CHUNK -> {
                 val chunkPayload = P2pMessageSerializer.deserializePayload<FileChunkPayload>(envelope.payload)
@@ -154,8 +177,19 @@ class ChatRepositoryImpl @Inject constructor(
             P2pMessageType.FILE_TRANSFER_COMPLETE -> {
                 val completePayload = P2pMessageSerializer.deserializePayload<FileTransferCompletePayload>(envelope.payload)
                 if (completePayload != null) {
-                    finalizeFileReception(envelope.senderId, completePayload, sourcePeerId)
-                }
+                    // Определяем, был ли это файл чата или аватар
+                    val metadata = incomingFileMetadataStore[completePayload.fileTransferId]
+                    if (metadata is EnhancedMediaMetadata) { // Это был файл из чат-сообщения
+                        val associatedMessage = messageDao.findMessageByFileTransferId(completePayload.fileTransferId) // Нужен этот метод
+                        if (associatedMessage != null) {
+                            finalizeFileReception(envelope.senderId, completePayload, associatedMessage.messageId, isAvatar = false)
+                        } else { Timber.e("Не найдено сообщение для fileId ${completePayload.fileTransferId} при завершении") }
+                    } else if (metadata is UserProfilePayload) { // Это был аватар
+                        finalizeFileReception(envelope.senderId, completePayload, metadata.userId, isAvatar = true)
+                    } else {
+                        Timber.w("Неизвестный тип метаданных для fileId ${completePayload.fileTransferId} при завершении")
+                    }
+                } else { /* ... ошибка ... */ }
             }
             P2pMessageType.FILE_TRANSFER_ERROR -> {
                 val errorPayload = P2pMessageSerializer.deserializePayload<FileTransferErrorPayload>(envelope.payload)
@@ -757,7 +791,9 @@ class ChatRepositoryImpl @Inject constructor(
                 isArchived = entity.isArchived,
                 isMuted = entity.isMuted,
                 chatType = ChatType.valueOf(entity.chatType.uppercase()),
-                participantIds = entity.participantIds
+                participantIds = entity.participantIds,
+                lastKnownPeerProfileTimestamp = entity.lastKnownPeerProfileTimestamp,
+                peerDescription = entity.peerDescription
             )
         } catch (e: IllegalArgumentException) { // Ошибка парсинга enum
             Timber.tag(TAG).e(e, "Ошибка маппинга ChatSessionEntity в Domain для ${entity.sessionId}")
@@ -769,27 +805,55 @@ class ChatRepositoryImpl @Inject constructor(
         sessionId: String,
         newPeerName: String,
         newPeerDescription: String?,
-        newPeerAvatarUrl: String?
+        newPeerAvatarUrl: String?,
+        profileTimestamp: Long? // НОВЫЙ ПАРАМЕТР
     ): Result<Unit, ChatError> {
         return withContext(defaultDispatcher) {
             try {
                 val session = chatSessionDao.getSessionById(sessionId)
                 if (session != null) {
-                    val updatedSession = session.copy(
-                        peerName = newPeerName,
-                        peerDescription = newPeerDescription ?: session.peerDescription,
-                        peerAvatarUrl = newPeerAvatarUrl ?: session.peerAvatarUrl
-                    )
-                    chatSessionDao.insertOrUpdateSession(updatedSession)
+                    // Только обновляем, если полученный профиль новее или такой же
+                    // (на случай получения старых/повторных сообщений профиля)
+                    if (profileTimestamp == null || profileTimestamp >= (session.lastKnownPeerProfileTimestamp ?: 0L) ) {
+                        val updatedSession = session.copy(
+                            peerName = newPeerName,
+                            peerDescription = newPeerDescription ?: session.peerDescription,
+                            peerAvatarUrl = newPeerAvatarUrl ?: session.peerAvatarUrl,
+                            lastKnownPeerProfileTimestamp = profileTimestamp ?: session.lastKnownPeerProfileTimestamp // Обновляем timestamp
+                        )
+                        chatSessionDao.insertOrUpdateSession(updatedSession) // Используем insertOrUpdate
+                        Timber.tag(TAG).i("Информация профиля для сессии $sessionId обновлена (ts: $profileTimestamp).")
+                    } else {
+                        Timber.tag(TAG).i("Получен устаревший профиль для сессии $sessionId (ts: $profileTimestamp, known: ${session.lastKnownPeerProfileTimestamp}). Игнорируем.")
+                    }
                     Result.Success(Unit)
                 } else {
-                    Result.Error(ChatError.NotFound("Сессия $sessionId не найдена для обновления профиля"))
+                    // Если сессии нет, но пришел профиль, можно создать сессию
+                    // Это может произойти, если профиль пришел раньше, чем мы создали сессию через getOrCreateChatSession
+                    val currentUserId = (cryptoRepository.getUserNickname() as? Result.Success)?.value
+                    if (currentUserId != null && sessionId != currentUserId) { // Не создаем сессию с самим собой
+                        Timber.w("Сессия $sessionId не найдена, но получен профиль. Создаем новую сессию.")
+                        val newSession = ChatSessionEntity(
+                            sessionId = sessionId,
+                            peerName = newPeerName,
+                            peerDescription = newPeerDescription,
+                            peerAvatarUrl = newPeerAvatarUrl,
+                            lastKnownPeerProfileTimestamp = profileTimestamp,
+                            chatType = ChatType.PEER_TO_PEER.name, // Предполагаем P2P
+                            participantIds = listOf(sessionId)
+                        )
+                        chatSessionDao.insertOrUpdateSession(newSession)
+                        Result.Success(Unit)
+                    } else {
+                        Result.Error(ChatError.NotFound("Сессия чата $sessionId не найдена и не удалось создать новую"))
+                    }
                 }
             } catch (e: Exception) {
-                Result.Error(ChatError.StorageError("Ошибка обновления профиля сессии $sessionId", e))
+                Result.Error(ChatError.StorageError("Не удалось обновить профиль сессии $sessionId", e))
             }
         }
     }
+
 
     override suspend fun getSessionInfo(sessionId: String): Result<DomainUserProfile, ChatError> {
 
@@ -801,9 +865,193 @@ class ChatRepositoryImpl @Inject constructor(
                 userId = sessionId,
                 displayName = chatSession.peerName,
                 avatarUri = chatSession.peerAvatarUrl,
-                statusMessage = chatSession.peerDescription
+                statusMessage = chatSession.peerDescription,
+                lastLocalEditTimestamp = 0L
             )
         )
+    }
+
+
+    override suspend fun sendMyProfileInfoToPeer(targetPeerId: String, profile: DomainUserProfile): Result<Unit, ChatError> {
+        return withContext(defaultDispatcher) {
+            try {
+                // Проверка, нужно ли отправлять (если профиль не менялся с последней отправки)
+                val sessionInfo = chatSessionDao.getSessionById(targetPeerId)
+                if (sessionInfo?.lastKnownPeerProfileTimestamp != null &&
+                    profile.lastLocalEditTimestamp <= sessionInfo.lastKnownPeerProfileTimestamp!!) {
+                    Timber.d("Профиль для $targetPeerId не требует обновления (локальное изм: ${profile.lastLocalEditTimestamp}, известно пиру: ${sessionInfo.lastKnownPeerProfileTimestamp}).")
+                    return@withContext Result.Success(Unit) // Уже актуально
+                }
+
+                val currentUserId = profile.userId
+                var avatarFileIdForPayload: String? = null
+                // ... (остальная логика подготовки avatarFileId, avatarFileName и т.д. как раньше) ...
+                var avatarFileNameForPayload: String? = null
+                var avatarMimeTypeForPayload: String? = null
+                var avatarFileSizeForPayload: Long? = null
+                var avatarLocalPathForSending: String? = null
+
+                if (!profile.avatarUri.isNullOrBlank() && !profile.avatarUri.startsWith("http")) {
+                    val avatarUri = Uri.parse(profile.avatarUri)
+                    val originalFileName = getFileNameFromUri(avatarUri, "avatar_${UUID.randomUUID()}")
+                    val copiedAvatarInfo = copyFileToAppStorage(avatarUri, MessageType.IMAGE, originalFileName, AVATARS_SUBDIR)
+                    if (copiedAvatarInfo != null) {
+                        if (copiedAvatarInfo.size <= MAX_FILE_SIZE_BYTES / 5) {
+                            avatarFileIdForPayload = UUID.randomUUID().toString()
+                            avatarFileNameForPayload = copiedAvatarInfo.displayName
+                            avatarMimeTypeForPayload = copiedAvatarInfo.mimeType
+                            avatarFileSizeForPayload = copiedAvatarInfo.size
+                            avatarLocalPathForSending = copiedAvatarInfo.localPath
+                        } else { Timber.w("Аватар слишком большой для P2P.") }
+                    } else { Timber.w("Не удалось обработать локальный аватар ${profile.avatarUri}.") }
+                }
+
+
+                val userProfilePayload = UserProfilePayload(
+                    userId = currentUserId,
+                    displayName = profile.displayName,
+                    statusMessage = profile.statusMessage,
+                    avatarFileId = avatarFileIdForPayload,
+                    avatarFileName = avatarFileNameForPayload,
+                    avatarMimeType = avatarMimeTypeForPayload,
+                    avatarFileSize = avatarFileSizeForPayload,
+                    avatarRemoteUrl = if (avatarFileIdForPayload == null && profile.avatarUri?.startsWith("http") == true) profile.avatarUri else null
+                )
+                val payloadJson = P2pMessageSerializer.serializePayload(userProfilePayload)
+                    ?: return@withContext Result.Error(ChatError.OperationFailed("Сериализация UserProfilePayload не удалась", null))
+
+                val currentTimestamp = System.currentTimeMillis() // Фиксируем время отправки
+                val envelope = P2pMessageEnvelope(
+                    messageId = "profile_update_${UUID.randomUUID()}",
+                    senderId = currentUserId,
+                    timestamp = currentTimestamp, // Используем фиксированное время
+                    type = P2pMessageType.USER_PROFILE_INFO,
+                    payload = payloadJson
+                )
+
+                val sendMetaResult = sendP2pEnvelope(targetPeerId, envelope)
+
+                if (sendMetaResult is Result.Success) {
+                    // Обновляем lastKnownPeerProfileTimestamp в БД для этой сессии
+                    updateChatSessionProfileTimestamp(targetPeerId, currentTimestamp)
+
+                    if (avatarFileIdForPayload != null && avatarLocalPathForSending != null) {
+                        startSendingFileChunks(targetPeerId, avatarFileIdForPayload, avatarLocalPathForSending, currentUserId, "")
+                    }
+                }
+                sendMetaResult
+            } catch (e: Exception) {
+                Result.Error(ChatError.OperationFailed("Ошибка отправки профиля", e))
+            }
+        }
+    }
+
+    // Новый вспомогательный метод для обновления только timestamp профиля в сессии
+    private suspend fun updateChatSessionProfileTimestamp(sessionId: String, timestamp: Long) {
+        withContext(defaultDispatcher) {
+            try {
+                val session = chatSessionDao.getSessionById(sessionId)
+                if (session != null) {
+                    if (timestamp >= (session.lastKnownPeerProfileTimestamp ?: 0L)) {
+                        chatSessionDao.insertOrUpdateSession(session.copy(lastKnownPeerProfileTimestamp = timestamp))
+                        Timber.d("Обновлен lastKnownPeerProfileTimestamp для сессии $sessionId на $timestamp")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Ошибка обновления lastKnownPeerProfileTimestamp для сессии $sessionId")
+            }
+        }
+    }
+
+
+
+    private suspend fun copyFileToAppStorage(
+        sourceUri: Uri,
+        messageTypeForSubdir: MessageType, // Используется для определения подпапки, если targetSubDir null
+        originalNameFromUri: String?,
+        targetSubDirOverride: String? = null // Явное указание подпапки
+    ): CopiedFileInfo? {
+        return withContext(defaultDispatcher) {
+            var inputStream: InputStream? = null
+            var outputStream: FileOutputStream? = null
+            var destinationFile: File? = null
+            try {
+                val fileName = getFileNameFromUri(sourceUri, originalNameFromUri)
+                Timber.d("Копирование файла. Source URI: $sourceUri, Resolved FileName: $fileName")
+
+                val finalTargetSubDir = targetSubDirOverride ?: when (messageTypeForSubdir) {
+                    MessageType.IMAGE, MessageType.VIDEO, MessageType.AUDIO, MessageType.FILE -> MEDIA_SUBDIR
+                    else -> MEDIA_SUBDIR // По умолчанию
+                }
+                Timber.d("Целевая подпапка: $finalTargetSubDir")
+
+                val mediaDir = File(context.filesDir, finalTargetSubDir)
+                if (!mediaDir.exists() && !mediaDir.mkdirs()) {
+                    Timber.e("Не удалось создать директорию: ${mediaDir.absolutePath}")
+                    return@withContext null
+                }
+
+                val extension = fileName.substringAfterLast('.', "")
+                val uniqueFileNameInternal = "${UUID.randomUUID()}${if (extension.isNotEmpty()) ".$extension" else ""}"
+                destinationFile = File(mediaDir, uniqueFileNameInternal)
+
+                inputStream = if (sourceUri.scheme == "file") {
+                    // Для file:/// URI, если ContentResolver не сработает, пробуем напрямую
+                    val filePath = sourceUri.path
+                    if (filePath != null) File(filePath).inputStream() else null
+                } else {
+                    context.contentResolver.openInputStream(sourceUri)
+                }
+
+                if (inputStream == null) {
+                    Timber.e("Не удалось открыть InputStream для URI: $sourceUri (схема: ${sourceUri.scheme})")
+                    return@withContext null
+                }
+
+                outputStream = FileOutputStream(destinationFile)
+                val fileSize = inputStream.copyTo(outputStream)
+                Timber.d("Файл скопирован в ${destinationFile.absolutePath}, размер: $fileSize байт")
+
+                if (fileSize > 0) {
+                    CopiedFileInfo(destinationFile.absolutePath, fileName, fileSize, context.contentResolver.getType(sourceUri))
+                } else {
+                    Timber.e("Скопированный файл пуст или ошибка копирования: ${destinationFile.absolutePath}")
+                    destinationFile.delete()
+                    null
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Ошибка при копировании файла из URI: $sourceUri в хранилище приложения.")
+                destinationFile?.delete() // Пытаемся удалить, если файл был создан
+                null
+            } finally {
+                try {
+                    inputStream?.close()
+                    outputStream?.close()
+                } catch (ioe: IOException) {
+                    Timber.e(ioe, "Ошибка при закрытии потоков.")
+                }
+            }
+        }
+    }
+
+    // Обновленное имя и более надежная логика
+    private fun getFileNameFromUri(uri: Uri, fallbackName: String?): String {
+        var name: String? = null
+        if (ContentResolver.SCHEME_CONTENT == uri.scheme) {
+            val cursor: Cursor? = context.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val displayNameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (displayNameIndex != -1) {
+                        name = it.getString(displayNameIndex)
+                    }
+                }
+            }
+        }
+        if (name == null && ContentResolver.SCHEME_FILE == uri.scheme) {
+            name = uri.lastPathSegment
+        }
+        return name?.ifBlank { null } ?: fallbackName ?: UUID.randomUUID().toString()
     }
 
 
@@ -814,41 +1062,6 @@ class ChatRepositoryImpl @Inject constructor(
         val size: Long,
         val mimeType: String?
     )
-
-    private suspend fun copyFileToAppStorage(sourceUri: Uri, messageType: MessageType, originalNameFromUri: String?): CopiedFileInfo? {
-        return withContext(defaultDispatcher) { // Выполняем в IO
-            try {
-                val fileName = getFileNameFromContentResolver(sourceUri, originalNameFromUri)
-                val mimeType = context.contentResolver.getType(sourceUri)
-
-                val mediaDir = File(context.filesDir, MEDIA_SUBDIR)
-                if (!mediaDir.exists()) mediaDir.mkdirs()
-
-                // Генерируем уникальное имя, чтобы избежать коллизий, но сохраняем расширение
-                val extension = fileName.substringAfterLast('.', "")
-                val uniqueFileNameInternal = "${UUID.randomUUID()}${if (extension.isNotEmpty()) ".$extension" else ""}"
-                val destinationFile = File(mediaDir, uniqueFileNameInternal)
-
-                var fileSize: Long = 0
-                context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
-                    FileOutputStream(destinationFile).use { outputStream ->
-                        fileSize = inputStream.copyTo(outputStream)
-                    }
-                }
-
-                if (fileSize > 0) {
-                    CopiedFileInfo(destinationFile.absolutePath, fileName, fileSize, mimeType)
-                } else {
-                    destinationFile.delete() // Удаляем пустой файл
-                    Timber.e("Не удалось скопировать файл или файл пуст: $sourceUri")
-                    null
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Ошибка при копировании файла из URI: $sourceUri")
-                null
-            }
-        }
-    }
 
     // Исправленное имя функции
     private fun getFileNameFromContentResolver(uri: Uri, fallbackName: String?): String {
@@ -870,15 +1083,25 @@ class ChatRepositoryImpl @Inject constructor(
         return name ?: fallbackName ?: UUID.randomUUID().toString() // Если все остальное не удалось
     }
 
+
     private suspend fun processIncomingFileChunk(senderId: String, chunkPayload: FileChunkPayload) {
         withContext(defaultDispatcher) {
             try {
                 val fileId = chunkPayload.fileTransferId
-                val metadata = incomingFileMetadataStore[fileId]
-                if (metadata == null) {
+                // Получаем метаданные (могут быть EnhancedMediaMetadata или UserProfilePayload)
+                val metadataObject = incomingFileMetadataStore[fileId]
+
+                if (metadataObject == null) {
                     Timber.e("Получен чанк для неизвестного fileId: $fileId от $senderId. Метаданные не найдены.")
-                    sendP2pFileTransferError(senderId, fileId, "Метаданные файла не получены или утеряны.", "unknown_chat_msg_id_for_error")
+                    // Не отправляем ошибку, так как не знаем, к какому сообщению это относится,
+                    // если только не хранить fileId -> chatMessageId отдельно.
                     return@withContext
+                }
+
+                val (fileNameForLog, associatedMessageIdForError) = when (metadataObject) {
+                    is EnhancedMediaMetadata -> metadataObject.fileName to messageDao.findMessageByFileTransferId(fileId)?.messageId
+                    is UserProfilePayload -> metadataObject.avatarFileName to metadataObject.userId // Используем userId как идентификатор для аватара
+                    else -> "unknown_file" to "unknown_assoc_id"
                 }
 
                 val tempFileDir = File(context.cacheDir, INCOMING_TEMP_SUBDIR)
@@ -886,51 +1109,58 @@ class ChatRepositoryImpl @Inject constructor(
                 val tempFile = File(tempFileDir, "$fileId.part")
 
                 val outputStream = incomingFileStreams.computeIfAbsent(fileId) {
-                    FileOutputStream(tempFile, chunkPayload.chunkIndex > 0) // append = true для чанков > 0
+                    FileOutputStream(tempFile, chunkPayload.chunkIndex > 0)
                 }
 
                 val chunkBytes = Base64.decode(chunkPayload.dataBase64, Base64.NO_WRAP)
                 outputStream.write(chunkBytes)
-                Timber.v("Чанк #${chunkPayload.chunkIndex + 1}/${chunkPayload.totalChunks} для файла ${metadata.fileName} (ID: $fileId) записан. Размер: ${chunkBytes.size}")
+                Timber.v("Чанк #${chunkPayload.chunkIndex + 1}/${chunkPayload.totalChunks} для файла '$fileNameForLog' (ID: $fileId) записан. Размер: ${chunkBytes.size}")
 
-                // TODO: Обновить прогресс загрузки в UI (например, через обновление MessageEntity и Flow)
+                // TODO: Обновить прогресс загрузки в UI
 
                 if (chunkPayload.isLastChunk || (chunkPayload.chunkIndex + 1 == chunkPayload.totalChunks)) {
-                    Timber.i("Получен последний чанк для файла ${metadata.fileName} (ID: $fileId). Завершение приема.")
+                    Timber.i("Получен последний чанк для файла '$fileNameForLog' (ID: $fileId). Завершение приема.")
                     outputStream.flush()
                     outputStream.close()
                     incomingFileStreams.remove(fileId)
-                    // Вызываем finalizeFileReception с ID сообщения, к которому привязан файл
-                    val associatedMessage = messageDao.findMessageByFileTransferId(fileId) // Нужен этот метод в DAO
-                    if (associatedMessage != null) {
-                        finalizeFileReception(senderId, FileTransferCompletePayload(fileId, true, null), associatedMessage.messageId)
-                    } else {
-                        Timber.e("Не найдено сообщение в БД для fileId $fileId при завершении приема.")
-                        // Ошибка, но файл может быть собран. Что делать?
-                        tempFile.delete() // Удаляем временный файл, так как не можем связать с сообщением
-                    }
+
+                    val isAvatar = metadataObject is UserProfilePayload
+                    val identifier = if (isAvatar) (metadataObject as UserProfilePayload).userId else associatedMessageIdForError ?: fileId
+
+                    finalizeFileReception(senderId, FileTransferCompletePayload(fileId, true, null), identifier, isAvatar)
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Ошибка при обработке входящего чанка файла ${chunkPayload.fileTransferId}")
                 incomingFileStreams.remove(chunkPayload.fileTransferId)?.close()
                 File(context.cacheDir, "$INCOMING_TEMP_SUBDIR/${chunkPayload.fileTransferId}.part").delete()
-                val metadata = incomingFileMetadataStore[chunkPayload.fileTransferId]
-                val chatMsgIdForError = metadata?.let { meta ->
-                    messageDao.findMessageByFileTransferId(meta.fileTransferId)?.messageId
-                } ?: "unknown_chat_msg_id"
-                sendP2pFileTransferError(senderId, chunkPayload.fileTransferId, "Ошибка на стороне получателя: ${e.message}", chatMsgIdForError)
-                metadata?.let { messageDao.updateMessageStatusByFileTransferId(it.fileTransferId, MessageStatus.FAILED.name) }
 
+                val metadataObject = incomingFileMetadataStore[chunkPayload.fileTransferId]
+                val assocId = when(metadataObject) {
+                    is EnhancedMediaMetadata -> messageDao.findMessageByFileTransferId(chunkPayload.fileTransferId)?.messageId ?: chunkPayload.fileTransferId
+                    is UserProfilePayload -> metadataObject.userId
+                    else -> chunkPayload.fileTransferId
+                }
+                sendP2pFileTransferError(senderId, chunkPayload.fileTransferId, "Ошибка на стороне получателя: ${e.message}", assocId)
+                if (metadataObject is EnhancedMediaMetadata) {
+                    messageDao.updateMessageStatusByFileTransferId(chunkPayload.fileTransferId, MessageStatus.FAILED.name)
+                }
+                // Для аватара ошибку нужно обработать иначе (например, сбросить попытку загрузки)
             }
         }
     }
 
-    private suspend fun finalizeFileReception(senderId: String, completePayload: FileTransferCompletePayload, associatedChatMessageId: String) {
+    private suspend fun finalizeFileReception(
+        senderId: String,
+        completePayload: FileTransferCompletePayload,
+        associatedIdentifier: String, // Может быть chatMessageId или userId (для аватара)
+        isAvatar: Boolean
+    ) {
         withContext(defaultDispatcher) {
             val fileId = completePayload.fileTransferId
-            val metadata = incomingFileMetadataStore.remove(fileId) // Удаляем метаданные после использования
-            if (metadata == null) {
-                Timber.e("Не найдены метаданные для завершения приема файла $fileId (связано с сообщением $associatedChatMessageId)")
+            val metadataOrProfilePayload = incomingFileMetadataStore.remove(fileId)
+
+            if (metadataOrProfilePayload == null) {
+                Timber.e("Не найдены метаданные для завершения приема файла $fileId (связано с $associatedIdentifier)")
                 return@withContext
             }
 
@@ -938,37 +1168,46 @@ class ChatRepositoryImpl @Inject constructor(
             val tempFile = File(tempFileDir, "$fileId.part")
 
             if (!tempFile.exists()) {
-                Timber.e("Временный файл $fileId.part не найден для завершения (сообщение $associatedChatMessageId).")
-                messageDao.updateMessageStatus(associatedChatMessageId, MessageStatus.FAILED.name)
+                Timber.e("Временный файл $fileId.part не найден для $associatedIdentifier.")
+                if (!isAvatar) messageDao.updateMessageStatus(associatedIdentifier, MessageStatus.FAILED.name)
+                // Для аватара просто логируем
                 return@withContext
             }
 
             if (completePayload.success) {
-                // TODO: Проверка хеша файла (completePayload.finalHash)
-                val finalMediaDir = File(context.filesDir, MEDIA_SUBDIR)
+                val fileName = when(metadataOrProfilePayload) {
+                    is EnhancedMediaMetadata -> metadataOrProfilePayload.fileName
+                    is UserProfilePayload -> metadataOrProfilePayload.avatarFileName ?: "$fileId.jpg" // Имя для аватара
+                    else -> "$fileId.dat"
+                }
+
+                val finalSubDir = if (isAvatar) AVATARS_SUBDIR else MEDIA_SUBDIR
+                val finalMediaDir = File(context.filesDir, finalSubDir)
                 if (!finalMediaDir.exists()) finalMediaDir.mkdirs()
-                val finalFile = File(finalMediaDir, metadata.fileName) // Используем оригинальное имя файла
+                val finalFile = File(finalMediaDir, fileName)
 
                 try {
                     if (tempFile.renameTo(finalFile)) {
-                        Timber.i("Файл ${metadata.fileName} (ID: $fileId) успешно собран и сохранен в ${finalFile.absolutePath}")
-                        messageDao.updateMessageLocalPathAndStatus(associatedChatMessageId, finalFile.absolutePath, MessageStatus.DOWNLOADED.name)
-                    } else {
-                        Timber.e("Не удалось переместить временный файл $fileId.part в ${finalFile.absolutePath}")
-                        messageDao.updateMessageStatus(associatedChatMessageId, MessageStatus.FAILED.name)
-                        tempFile.delete()
-                    }
-                } catch (e: Exception) {
-                    Timber.e(e, "Ошибка при перемещении/сохранении файла ${metadata.fileName}")
-                    messageDao.updateMessageStatus(associatedChatMessageId, MessageStatus.FAILED.name)
-                    tempFile.delete()
-                }
-            } else {
-                Timber.w("Отправитель сообщил о неудачной передаче файла $fileId (сообщение $associatedChatMessageId).")
-                messageDao.updateMessageStatus(associatedChatMessageId, MessageStatus.FAILED.name)
-                tempFile.delete()
-            }
+                        Timber.i("Файл '$fileName' (ID: $fileId) успешно собран и сохранен в ${finalFile.absolutePath}")
+                        if (isAvatar) {
+                            // Обновляем путь к аватару в профиле пользователя (локально)
+                            // и в ChatSessionEntity для этого пира
+                            val userProfileResult = cryptoRepository.loadUserProfile() // Загружаем свой профиль, если это наш аватар
+                            if (userProfileResult is Result.Success && userProfileResult.value.userId == associatedIdentifier) {
+                                cryptoRepository.saveUserProfile(userProfileResult.value.copy(avatarUri = finalFile.toURI().toString()))
+                            }
+                            // Обновляем ChatSession, если это аватар другого пользователя
+                            updateChatSessionProfileInfo(associatedIdentifier, (metadataOrProfilePayload as UserProfilePayload).displayName, metadataOrProfilePayload.statusMessage, finalFile.toURI().toString(), System.currentTimeMillis())
+                        } else {
+                            messageDao.updateMessageLocalPathAndStatus(associatedIdentifier, finalFile.absolutePath, MessageStatus.DOWNLOADED.name)
+                        }
+                    } else { /* ... ошибка перемещения ... */ }
+                } catch (e: Exception) { /* ... ошибка сохранения ... */ }
+            } else { /* ... отправитель сообщил о неудаче ... */ }
+            if (!completePayload.success || !tempFile.exists()) tempFile.delete() // Удаляем временный файл в любом случае при ошибке или если он еще есть
         }
     }
+
+
 }
 

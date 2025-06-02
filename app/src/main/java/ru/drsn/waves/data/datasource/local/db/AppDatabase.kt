@@ -15,7 +15,7 @@ import ru.drsn.waves.data.datasource.local.db.entity.StringListConverter
 
 @Database(
     entities = [ChatSessionEntity::class, MessageEntity::class],
-    version = 2, // Увеличивай версию при изменении схемы и добавляй миграции
+    version = 3, // Увеличивай версию при изменении схемы и добавляй миграции
     exportSchema = false, // Отключи экспорт схемы в JSON, если она не нужна для тестов или анализа
 )
 @TypeConverters(StringListConverter::class) // Регистрируем наш конвертер на уровне БД
@@ -44,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     DATABASE_NAME
                 )
-                    // .fallbackToDestructiveMigration(true) // В разработке: удаляет и пересоздает БД при изменении версии без миграции. НЕ ИСПОЛЬЗОВАТЬ В ПРОДАШЕНЕ!
+                    .fallbackToDestructiveMigration(true) // В разработке: удаляет и пересоздает БД при изменении версии без миграции. НЕ ИСПОЛЬЗОВАТЬ В ПРОДАШЕНЕ!
                     // .addMigrations(MIGRATION_1_2) // Здесь будут миграции
                     .build()
                 INSTANCE = instance

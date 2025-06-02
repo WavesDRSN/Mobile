@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import ru.drsn.waves.data.datasource.local.db.entity.ChatSessionEntity
@@ -16,8 +17,17 @@ interface ChatSessionDao {
      * Вставляет или обновляет (если существует) сессию чата.
      * Полезно, когда приходит новое сообщение и нужно обновить lastMessageTimestamp и т.д.
      */
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrUpdateSession(session: ChatSessionEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) // Или ABORT, если хотите ошибку при дубликате
+    suspend fun insertSession(session: ChatSessionEntity): Long // Возвращает ID или -1 при ошибке/игноре
+
+    // Транзакционный метод для "вставить или обновить" без REPLACE
+    @Transaction
+    suspend fun insertOrUpdateSession(session: ChatSessionEntity) {
+        val id = insertSession(session)
+        if (id == -1L) { // Если вставка была проигнорирована (запись существует)
+            updateSession(session)
+        }
+    }
 
     /**
      * Вставляет или обновляет список сессий.
