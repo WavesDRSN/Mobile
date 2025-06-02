@@ -125,11 +125,12 @@ class WebRTCRepositoryImpl @Inject constructor(
             is WebRTCControllerEvent.ConnectionStateChanged -> {
                 _webRTCEvents.emit(WebRTCEvent.SessionStateChanged(event.peerId, event.newState))
                 // Обновляем состояние DataChannel при изменении состояния ICE
-                if (event.newState == PeerConnection.IceConnectionState.CLOSED ||
-                    event.newState == PeerConnection.IceConnectionState.FAILED ||
-                    event.newState == PeerConnection.IceConnectionState.DISCONNECTED) {
+                if (event.newState == PeerConnection.IceConnectionState.CLOSED){
                     dataChannelStates.remove(event.peerId) // Считаем канал не готовым
                 }
+                else if (event.newState == PeerConnection.IceConnectionState.FAILED ||
+                    event.newState == PeerConnection.IceConnectionState.DISCONNECTED)
+                    webRTCController.closeConnection(event.peerId)
             }
             is WebRTCControllerEvent.DataChannelOpened -> {
                 dataChannelStates[event.peerId] = true // Канал открыт
