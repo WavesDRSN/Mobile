@@ -15,6 +15,7 @@ import org.webrtc.SessionDescription
 import ru.drsn.waves.data.datasource.remote.webrtc.IWebRTCController
 import ru.drsn.waves.data.datasource.remote.webrtc.WebRTCControllerEvent
 import ru.drsn.waves.data.datasource.remote.webrtc.WebRTCControllerImpl
+import ru.drsn.waves.domain.model.signaling.SignalingEvent
 import ru.drsn.waves.domain.model.signaling.SdpData as SignalingSdpData // Переименовываем для ясности
 import ru.drsn.waves.domain.model.signaling.IceCandidateData as SignalingIceCandidateData // Переименовываем
 import ru.drsn.waves.domain.model.webrtc.*
@@ -49,6 +50,9 @@ class WebRTCRepositoryImpl @Inject constructor(
     // Мьютекс для синхронизации доступа к состоянию инициализации, если необходимо
     private val initializationMutex = Mutex()
     private var isInitialized = false
+    private val callSet: MutableSet<String> = mutableSetOf()
+
+    private val dataChannelStates = ConcurrentHashMap<PeerId, Boolean>()
 
 
     init {
@@ -120,28 +124,31 @@ class WebRTCRepositoryImpl @Inject constructor(
             }
             is WebRTCControllerEvent.ConnectionStateChanged -> {
                 _webRTCEvents.emit(WebRTCEvent.SessionStateChanged(event.peerId, event.newState))
+                // Обновляем состояние DataChannel при изменении состояния ICE
+                if (event.newState == PeerConnection.IceConnectionState.CLOSED ||
+                    event.newState == PeerConnection.IceConnectionState.FAILED ||
+                    event.newState == PeerConnection.IceConnectionState.DISCONNECTED) {
+                    dataChannelStates.remove(event.peerId) // Считаем канал не готовым
+                }
             }
             is WebRTCControllerEvent.DataChannelOpened -> {
+                dataChannelStates[event.peerId] = true // Канал открыт
                 _webRTCEvents.emit(WebRTCEvent.DataChannelOpened(event.peerId))
             }
             is WebRTCControllerEvent.DataChannelClosed -> {
+                dataChannelStates.remove(event.peerId) // Канал закрыт
                 _webRTCEvents.emit(WebRTCEvent.DataChannelClosed(event.peerId))
             }
             is WebRTCControllerEvent.DataChannelMessageReceived -> {
-
+                // Эмитим событие с сырыми байтами
                 _webRTCEvents.emit(WebRTCEvent.BinaryMessageReceived(event.peerId, event.message))
             }
             is WebRTCControllerEvent.PeerConnectionError -> {
                 _webRTCEvents.emit(WebRTCEvent.ErrorOccurred(event.peerId, event.errorDescription))
+                dataChannelStates.remove(event.peerId) // При ошибке соединения считаем канал не готовым
             }
             is WebRTCControllerEvent.RemoteDataChannelAvailable -> {
-                // Удаленный пир создал DataChannel. WebRTCController должен его зарегистрировать.
-                // Здесь мы можем просто залогировать или эмитить событие, если нужно.
-                // Регистрация наблюдателя для этого канала уже должна быть в WebRTCControllerImpl.
-                Timber.tag(TAG).i("Удаленный DataChannel доступен от ${event.peerId.value}, метка: ${event.dataChannel.label()}")
-                // Если WebRTCControllerImpl не регистрирует наблюдателя автоматически, это нужно сделать здесь:
                 (webRTCController as? WebRTCControllerImpl)?.registerDataChannelObserver(event.peerId, event.dataChannel)
-
             }
         }
     }
@@ -181,6 +188,14 @@ class WebRTCRepositoryImpl @Inject constructor(
                 // initiateCall(newPeerId) // Это может быть сделано в ViewModel, подписанной на это событие
                 Timber.tag(TAG).i("Получено уведомление о новом пире ${event.newPeerId} от ${event.senderId}. Обработка на уровне ViewModel/UseCase.")
             }
+            is SignalingEvent.UserListUpdated -> {
+
+                val users = signalingRepository.getCurrentOnlineUsers()
+
+                for (candidate: String in callSet) {
+                    if (users.contains(candidate)) initiateCall(PeerId(candidate))
+                }
+            }
             else -> { /* Остальные события сигналинга обрабатываются выше по стеку */ }
         }
     }
@@ -190,6 +205,12 @@ class WebRTCRepositoryImpl @Inject constructor(
         Timber.tag(TAG).i("Инициация звонка пиру: ${peerId.value}")
         // WebRTCController создаст Offer и эмитнет LocalSdpCreated,
         // который будет обработан в processControllerEvent и отправлен через сигналинг.
+
+        if (!signalingRepository.getCurrentOnlineUsers().contains(peerId.value)) {
+            if (!callSet.contains(peerId.value)) callSet.add(peerId.value)
+            return Result.Error(WebRTCError.ConnectionSetupFailed(peerId, "User are currently offline and was added to call set"))
+        }
+
         webRTCController.createOffer(peerId, defaultSdpConstraints)
         return Result.Success(Unit) // Возвращаем успех немедленно, т.к. процесс асинхронный
     }
@@ -280,8 +301,13 @@ class WebRTCRepositoryImpl @Inject constructor(
         val iceState = currentIceStates[peerId] // Предположим, мы храним это
         return iceState?.toWebRTCSessionState()
     }
+
     private val currentIceStates = ConcurrentHashMap<PeerId, PeerConnection.IceConnectionState>()
-    // В processControllerEvent при ConnectionStateChanged нужно обновлять currentIceStates
+
+    override suspend fun isDataChannelReady(peerId: PeerId): Boolean {
+        // Проверяем наше внутреннее состояние, обновляемое по событию DataChannelOpened
+        return dataChannelStates[peerId] == true
+    }
 
     override fun getActivePeers(): Set<PeerId> {
         return webRTCController.getActivePeerIds()

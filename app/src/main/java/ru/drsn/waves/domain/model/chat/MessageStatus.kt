@@ -6,5 +6,7 @@ enum class MessageStatus {
     DELIVERED,
     READ,
     FAILED,
-    PENDING_DOWNLOAD // Для медиа, которое еще не загружено
+    PENDING_DOWNLOAD, // Для медиа, которое еще не загружено
+    DOWNLOADED,
+    UPLOADING;
 }
