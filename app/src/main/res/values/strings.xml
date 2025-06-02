@@ -23,4 +23,7 @@
     <string name="from_registration_to_logging">Уже зарегистрированы? Войти</string>
     <string name="mnemonic_verification_input_hint">Введите первые три слова через пробел</string>
     <string name="back_text">Назад</string>
+    <string name="default_id">\@Waves</string>
+    <string name="username">Username</string>
+    <string name="bio">Bio</string>
 </resources>

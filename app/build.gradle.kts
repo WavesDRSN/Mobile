@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.google.dagger.hilt)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.androidx.room)
 }
 
 kotlin {
@@ -21,6 +22,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -60,7 +62,10 @@ android {
 }
 
 dependencies {
-    
+
+    implementation(libs.circleimageview)
+    implementation(libs.glide)
+
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)
     annotationProcessor(libs.androidx.room.compiler)
@@ -119,6 +124,9 @@ dependencies {
     implementation(libs.stream.webrtc.android)
 }
 
+room {
+    schemaDirectory("$projectDir/schemas")
+}
 
 protobuf {
     protoc {

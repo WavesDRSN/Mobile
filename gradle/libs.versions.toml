@@ -5,6 +5,7 @@ agp = "8.8.2"
 androidx-work = "2.10.0"
 bcprovJdk15to18 = "1.80"
 bitcoinjCoreVersion = "0.17"
+glide = "4.12.0"
 grpcKotlinStub = "1.4.1"
 grpcOkhttp = "1.64.0"
 hiltAndroid = "2.56.1"
@@ -49,6 +50,7 @@ androidx-security-crypto = { module = "androidx.security:security-crypto", versi
 androidx-work = {module = "androidx.work:work-runtime", version.ref = "androidx-work"}
 bcpkix-jdk18on = { module = "org.bouncycastle:bcpkix-jdk15to18", version.ref = "bcprovJdk15to18" }
 bitcoinj-bitcoinj-core = { module = "org.bitcoinj:bitcoinj-core", version.ref = "bitcoinjCoreVersion" }
+glide = { module = "com.github.bumptech.glide:glide", version.ref = "glide" }
 google-gson = {module = "com.google.code.gson:gson", version.ref = "gson"}
 grpc-kotlin-stub = { module = "io.grpc:grpc-kotlin-stub", version.ref = "grpcKotlinStub" }
 grpc-okhttp = { module = "io.grpc:grpc-okhttp", version.ref = "grpcOkhttp" }
@@ -71,12 +73,13 @@ protobuf-kotlin-lite = {module = "com.google.protobuf:protobuf-kotlin-lite", ver
 timber = {module = "com.jakewharton.timber:timber", version = "5.0.1"}
 stream-webrtc-android = { module = "io.getstream:stream-webrtc-android", version.ref = "streamWebrtcAndroid" }
 androidx-material3-android = { group = "androidx.compose.material3", name = "material3-android", version.ref = "material3Android" }
+circleimageview = { module = "de.hdodenhof:circleimageview", version = "3.1.0" }
 
 [plugins]
-org-jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 protobuf = { id = "com.google.protobuf", version = "0.9.4" }
 google-devtools-ksp = {id = 'com.google.devtools.ksp', version = '2.1.20-1.0.32'}
 google-dagger-hilt = {id = "com.google.dagger.hilt.android", version = "2.56.1"}
+androidx-room = {id = "androidx.room", version.ref="roomVersion"}

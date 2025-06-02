@@ -11,4 +11,5 @@ sealed class CryptoError {
     data class NicknameNotFound(val message: String?, val cause: Throwable? = null) : CryptoError()
     data class DeletionError(val message: String?, val cause: Throwable? = null) : CryptoError()
     data class Unknown(val message: String?, val cause: Throwable? = null) : CryptoError()
+    data class ProfileNotFound (val message: String?, val cause: Throwable? = null) : CryptoError()
 }

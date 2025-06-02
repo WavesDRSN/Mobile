@@ -83,6 +83,7 @@
         android:layout_height="wrap_content"
         android:background="@drawable/bg_button"
         android:text="@string/continue_text"
+        android:textColor="@color/button_text_color"
         app:backgroundTint="@null"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"

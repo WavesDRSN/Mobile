@@ -1,11 +1,14 @@
 package ru.drsn.waves.ui.chatlist
 
+import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
+import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.ActionBarDrawerToggle
@@ -18,6 +21,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.bumptech.glide.Glide
 import com.google.android.material.navigation.NavigationView
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -25,6 +29,7 @@ import ru.drsn.waves.R
 import ru.drsn.waves.databinding.ActivityChatListBinding
 import ru.drsn.waves.databinding.NavHeaderMainBinding
 import ru.drsn.waves.ui.chat.ChatActivity
+import ru.drsn.waves.ui.profile.ProfileActivity
 import timber.log.Timber
 
 @AndroidEntryPoint
@@ -45,10 +50,36 @@ class ChatListActivity : AppCompatActivity(), NavigationView.OnNavigationItemSel
         Timber.d("ChatListActivity создана")
 
         setupToolbarAndDrawer() // Объединил настройку тулбара и drawer
+        setupProfileInfo()
         setupRecyclerView()
         setupBottomNavigation()
         setupSearch()
         observeViewModel()
+    }
+
+    private fun setupProfileInfo() {
+        lifecycleScope.launch {
+            val profile = viewModel.getProfileDomainModel() ?:
+            return@launch
+
+            Glide.with(this@ChatListActivity)
+                .load(profile?.avatarUri)
+                .placeholder(R.drawable.ic_default_profile)
+                .error(R.drawable.ic_default_profile)
+                .centerCrop()
+                .into(binding.navView.getHeaderView(0).findViewById(R.id.profileAvatarView))
+
+            binding.navView.getHeaderView(0).findViewById<TextView>(R.id.user_id_header).text = profile.userId
+            binding.navView.getHeaderView(0).findViewById<TextView>(R.id.user_name_header).text = profile.displayName
+
+
+        }
+    }
+
+    @Override
+    override fun onResume() {
+        super.onResume()
+        setupProfileInfo()
     }
 
     private fun setupToolbarAndDrawer() {
@@ -68,6 +99,7 @@ class ChatListActivity : AppCompatActivity(), NavigationView.OnNavigationItemSel
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.toolbar_chat_list_menu, menu)
+
         return true
     }
 
@@ -78,7 +110,8 @@ class ChatListActivity : AppCompatActivity(), NavigationView.OnNavigationItemSel
         return when (item.itemId) {
             R.id.action_profile -> {
                 Toast.makeText(this, getString(R.string.profile_clicked_toast), Toast.LENGTH_SHORT).show()
-                // TODO: Переход на экран профиля
+                val intent = ProfileActivity.newIntent(this@ChatListActivity)
+                startActivity(intent)
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -106,6 +139,8 @@ class ChatListActivity : AppCompatActivity(), NavigationView.OnNavigationItemSel
                 }
                 R.id.navigation_profile -> {
                     Toast.makeText(this, "Переход на Профиль", Toast.LENGTH_SHORT).show()
+                    val intent = ProfileActivity.newIntent(this@ChatListActivity)
+                    startActivity(intent)
                     true
                 }
                 else -> false
@@ -151,6 +186,9 @@ class ChatListActivity : AppCompatActivity(), NavigationView.OnNavigationItemSel
                                 binding.chatsRecyclerView.visibility = View.GONE
                                 Toast.makeText(this@ChatListActivity, "Нет доступных чатов", Toast.LENGTH_SHORT).show()
                                 chatListAdapter.submitList(emptyList())
+                            }
+                            is ChatListUiState.MovedFromProfile -> {
+
                             }
                         }
                     }

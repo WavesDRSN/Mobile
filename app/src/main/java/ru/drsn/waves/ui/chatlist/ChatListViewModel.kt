@@ -16,12 +16,15 @@ import kotlinx.coroutines.launch
 import ru.drsn.waves.domain.model.chat.ChatError
 import ru.drsn.waves.domain.model.chat.ChatType
 import ru.drsn.waves.domain.model.chat.DomainChatSession
+import ru.drsn.waves.domain.model.crypto.CryptoError
+import ru.drsn.waves.domain.model.profile.DomainUserProfile
 import ru.drsn.waves.domain.usecase.chatlist.ObserveChatSessionsUseCase
 import ru.drsn.waves.domain.usecase.chatlist.GetOrCreateChatSessionForNavUseCase
 import ru.drsn.waves.domain.usecase.crypto.GetUserNicknameUseCase
 import timber.log.Timber
 import javax.inject.Inject
 import ru.drsn.waves.domain.model.utils.Result
+import ru.drsn.waves.domain.usecase.profile.LoadUserProfileUseCase
 import ru.drsn.waves.domain.usecase.signaling.ConnectToSignalingUseCase
 import ru.drsn.waves.domain.usecase.signaling.GetActiveUsers
 import ru.drsn.waves.domain.usecase.webrtc.InitializeWebRTCUseCase
@@ -33,7 +36,8 @@ class ChatListViewModel @Inject constructor(
     private val getCurrentUsernameUseCase: GetUserNicknameUseCase,
     private val connectToSignalingUseCase: ConnectToSignalingUseCase,
     private val initializeWebRTCUseCase: InitializeWebRTCUseCase,
-    private val getActiveUsers: GetActiveUsers
+    private val getActiveUsers: GetActiveUsers,
+    private val loadUserProfileUseCase: LoadUserProfileUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ChatListUiState>(ChatListUiState.Loading)
@@ -145,6 +149,16 @@ class ChatListViewModel @Inject constructor(
     val showToastEvent: Flow<String> = _showToastEvent.asSharedFlow()
 
     fun getCurrentUsername(): String? = currentUsername
+
+    suspend fun getProfileDomainModel(): DomainUserProfile? {
+        val loadProfileResult = loadUserProfileUseCase()
+
+        if (loadProfileResult is Result.Success) return loadProfileResult.value
+        else if (loadProfileResult is Result.Error) {
+            _uiState.emit(ChatListUiState.Error("Не удалось загрузить информацию профиля.\n${loadProfileResult.error}"))
+        }
+        return null
+    }
 
     fun onSearchQueryChanged(query: String) {
         // TODO: Реализовать логику поиска

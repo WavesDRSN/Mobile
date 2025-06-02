@@ -3,6 +3,7 @@ package ru.drsn.waves.ui.chat
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
@@ -14,9 +15,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import ru.drsn.waves.R
 import ru.drsn.waves.databinding.ActivityChatBinding
 import ru.drsn.waves.domain.model.utils.Result // Общий Result
 import ru.drsn.waves.domain.model.chat.*
+import ru.drsn.waves.ui.chat.info.ChatInfoActivity
 import timber.log.Timber
 
 @AndroidEntryPoint
@@ -57,6 +60,7 @@ class ChatActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbarChat)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         // Заголовок будет установлен из ViewModel
+        supportActionBar?.title = ""
     }
 
     private fun setupRecyclerView() {
@@ -98,7 +102,7 @@ class ChatActivity : AppCompatActivity() {
 
                         when (state) {
                             is ChatUiState.Success -> {
-                                supportActionBar?.title = state.chatSessionDetails?.peerName ?: viewModel.sessionId
+                                binding.toolbarTitle.text = state.chatSessionDetails?.peerName ?: viewModel.sessionId
 
                                 // Инициализируем или обновляем адаптер, если currentUserId доступен
                                 val currentUserId = (viewModel.getUserNicknameUseCase() as? Result.Success)?.value
@@ -137,10 +141,23 @@ class ChatActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) {
-            onBackPressedDispatcher.onBackPressed()
-            return true
+        return when (item.itemId) {
+            R.id.action_profile -> {
+                Toast.makeText(this, getString(R.string.profile_clicked_toast), Toast.LENGTH_SHORT).show()
+                val intent = ChatInfoActivity.newIntent(this@ChatActivity, viewModel.sessionId, viewModel.chatTypeFromArgs)
+                startActivity(intent)
+                true
+            }
+            android.R.id.home -> {
+                onBackPressedDispatcher.onBackPressed()
+                return true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
-        return super.onOptionsItemSelected(item)
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.toolbar_chat_menu, menu)
+        return true
     }
 }

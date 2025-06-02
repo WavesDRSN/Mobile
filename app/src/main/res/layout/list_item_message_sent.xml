@@ -25,7 +25,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             tools:text="Это мое исходящее сообщение, оно может быть довольно длинным и переноситься на несколько строк."
-            android:textColor="@android:color/white"
+            android:textColor="@android:color/black"
             android:textSize="16sp" />
 
         <TextView
@@ -35,7 +35,7 @@
             android:layout_gravity="end"
             android:layout_marginTop="4dp"
             tools:text="10:35"
-            android:textColor="#B0FFFFFF"
+            android:textColor="#0E0C18"
             android:textSize="12sp" />
     </LinearLayout>
 </LinearLayout>
