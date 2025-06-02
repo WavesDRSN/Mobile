@@ -8,6 +8,7 @@ import ru.drsn.waves.data.utils.SeedPhraseUtil
 import ru.drsn.waves.domain.model.crypto.*
 import ru.drsn.waves.domain.model.crypto.PublicKey
 import ru.drsn.waves.domain.model.crypto.Signature
+import ru.drsn.waves.domain.model.profile.DomainUserProfile
 import ru.drsn.waves.domain.model.utils.Result
 import ru.drsn.waves.domain.repository.ICryptoRepository
 import timber.log.Timber
@@ -97,6 +98,67 @@ class CryptoRepositoryImpl @Inject constructor(
                 Timber.tag(TAG).e(e, "Ошибка при регенерации ключей из сид-фразы")
                 Result.Error(CryptoError.GenerationError("Ошибка регенерации ключей", e))
             }
+        }
+    }
+
+    override suspend fun saveUserProfile(userProfile: DomainUserProfile): Result<Unit, CryptoError> {
+        try {
+            // Предполагаем, что userProfile.userId совпадает с текущим сохраненным никнеймом
+            // Если нет, возможно, стоит добавить проверку или передавать userId отдельно.
+            val nickResult = localDataSource.loadUserNickname()
+            if (nickResult == null || nickResult != userProfile.userId) {
+                Timber.w("Попытка сохранить профиль для ${userProfile.userId}, но сохраненный ник ($nickResult) другой или отсутствует.")
+                // Можно либо сохранить ник из профиля, либо вернуть ошибку.
+                // Пока что сохраним, если ник в профиле есть.
+                if(!localDataSource.saveUserNickname(userProfile.userId)) {
+                    return Result.Error(CryptoError.StoreError("Не удалось обновить никнейм из профиля", null))
+                }
+            }
+
+            var success = localDataSource.saveProfileDisplayName(userProfile.displayName)
+            userProfile.statusMessage?.let { success = success && localDataSource.saveProfileStatusMessage(it) }
+                ?: run { success = success && localDataSource.saveProfileStatusMessage("") } // Сохраняем пустую строку, если статус null
+            userProfile.avatarUri?.let { success = success && localDataSource.saveProfileAvatarUri(it) }
+                ?: run { success = success && localDataSource.saveProfileAvatarUri("") } // Сохраняем пустую строку, если URI null
+
+            return if (success) Result.Success(Unit)
+            else Result.Error(CryptoError.StoreError("Не удалось сохранить одно или несколько полей профиля", null))
+        } catch (e: Exception) {
+            Timber.e(e, "Исключение при сохранении профиля пользователя.")
+            return Result.Error(CryptoError.StoreError("Исключение при сохранении профиля", e))
+        }
+    }
+
+    override suspend fun loadUserProfile(): Result<DomainUserProfile, CryptoError> {
+        try {
+            val userId = localDataSource.loadUserNickname()
+                ?: return Result.Error(CryptoError.NicknameNotFound("wtf")) // Профиль не может существовать без никнейма
+
+            val displayName = localDataSource.loadProfileDisplayName()
+                ?: userId // Используем userId как displayName по умолчанию, если он не сохранен
+            val statusMessage = localDataSource.loadProfileStatusMessage() // Может быть null
+            val avatarUri = localDataSource.loadProfileAvatarUri()       // Может быть null
+
+            return Result.Success(
+                DomainUserProfile(
+                    userId = userId,
+                    displayName = displayName,
+                    statusMessage = statusMessage,
+                    avatarUri = avatarUri
+                )
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "Исключение при загрузке профиля пользователя.")
+            return Result.Error(CryptoError.LoadError("Исключение при загрузке профиля", e))
+        }
+    }
+
+    override suspend fun deleteUserProfile(): Result<Unit, CryptoError> {
+        return try {
+            if (localDataSource.clearUserProfileData()) Result.Success(Unit)
+            else Result.Error(CryptoError.DeletionError("Не удалось очистить данные профиля", null))
+        } catch (e: Exception) {
+            Result.Error(CryptoError.DeletionError("Исключение при удалении данных профиля", e))
         }
     }
 

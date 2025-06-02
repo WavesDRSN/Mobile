@@ -8,38 +8,34 @@ import androidx.room.TypeConverters
 
 @Entity(
     tableName = "chat_sessions",
-    indices = [Index(value = ["last_message_timestamp"])] // Индекс для сортировки по времени
+    indices = [Index(value = ["last_message_timestamp"])]
 )
-@TypeConverters(StringListConverter::class) // Применяем конвертер для participant_ids
+@TypeConverters(StringListConverter::class)
 data class ChatSessionEntity(
     @PrimaryKey
     @ColumnInfo(name = "session_id")
-    val sessionId: String, // Уникальный ID чата (ID другого пользователя или ID группы)
+    val sessionId: String,
 
     @ColumnInfo(name = "peer_name")
-    val peerName: String, // Отображаемое имя собеседника или название группы
+    var peerName: String,
 
     @ColumnInfo(name = "peer_avatar_url")
-    val peerAvatarUrl: String? = null,
+    var peerAvatarUrl: String? = null,
 
+    @ColumnInfo(name = "peer_description")
+    var peerDescription: String? = null,
     @ColumnInfo(name = "last_message_id")
     val lastMessageId: String? = null,
-
     @ColumnInfo(name = "last_message_timestamp")
     val lastMessageTimestamp: Long = 0L,
-
     @ColumnInfo(name = "unread_messages_count")
     val unreadMessagesCount: Int = 0,
-
     @ColumnInfo(name = "is_archived")
     val isArchived: Boolean = false,
-
     @ColumnInfo(name = "is_muted")
     val isMuted: Boolean = false,
-
-    @ColumnInfo(name = "chat_type") // "peer" или "group"
+    @ColumnInfo(name = "chat_type")
     val chatType: String,
-
-    @ColumnInfo(name = "participant_ids") // Список ID участников (для групповых чатов)
-    val participantIds: List<String> = emptyList() // Для личного чата здесь будет один ID
+    @ColumnInfo(name = "participant_ids")
+    val participantIds: List<String> = emptyList()
 )

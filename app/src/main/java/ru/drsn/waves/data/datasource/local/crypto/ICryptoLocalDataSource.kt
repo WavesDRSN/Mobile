@@ -23,6 +23,14 @@ interface ICryptoLocalDataSource {
     suspend fun loadEncryptedChatKey(): String?
     suspend fun deleteEncryptedChatKey(): Boolean
 
+    suspend fun saveProfileDisplayName(name: String): Boolean
+    suspend fun loadProfileDisplayName(): String?
+    suspend fun saveProfileStatusMessage(status: String): Boolean
+    suspend fun loadProfileStatusMessage(): String?
+    suspend fun saveProfileAvatarUri(uri: String): Boolean
+    suspend fun loadProfileAvatarUri(): String?
+    suspend fun clearUserProfileData(): Boolean // Для удаления всех данных профиля
+
     // --- Новые общие методы для шифрования/дешифрования данных ключом из Keystore ---
     /**
      * Шифрует предоставленные данные с использованием указанного ключа-обертки из Android Keystore.

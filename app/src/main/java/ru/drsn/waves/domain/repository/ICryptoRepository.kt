@@ -7,6 +7,7 @@ import ru.drsn.waves.domain.model.crypto.JavaPublicKey
 import ru.drsn.waves.domain.model.crypto.MnemonicPhrase
 import ru.drsn.waves.domain.model.crypto.PublicKey
 import ru.drsn.waves.domain.model.crypto.Signature
+import ru.drsn.waves.domain.model.profile.DomainUserProfile
 import ru.drsn.waves.domain.model.utils.Result
 
 interface ICryptoRepository {
@@ -92,4 +93,7 @@ interface ICryptoRepository {
     suspend fun deleteUserNickname(): Result<Unit, CryptoError>
     suspend fun regenerateKeysFromSeed(mnemonicPhrase: MnemonicPhrase): Result<Unit, CryptoError>
     suspend fun generateAndStoreNewKeys(): Result<InitializationResult.KeysGenerated, CryptoError>
+    suspend fun loadUserProfile(): Result<DomainUserProfile, CryptoError>
+    suspend fun deleteUserProfile(): Result<Unit, CryptoError>
+    suspend fun saveUserProfile(userProfile: DomainUserProfile): Result<Unit, CryptoError>
 }

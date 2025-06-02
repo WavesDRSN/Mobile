@@ -12,7 +12,6 @@ import kotlinx.coroutines.withContext
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import ru.drsn.waves.domain.model.crypto.AuthToken
 import timber.log.Timber
-import java.io.IOException
 import java.security.*
 import java.security.PublicKey
 import java.security.spec.PKCS8EncodedKeySpec
@@ -30,10 +29,16 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 ) : ICryptoLocalDataSource {
 
     companion object {
+
+        private const val KEY_PROFILE_DISPLAY_NAME = "profile_display_name"
+        private const val KEY_PROFILE_STATUS_MESSAGE = "profile_status_message"
+        private const val KEY_PROFILE_AVATAR_URI = "profile_avatar_uri"
+
         private const val AUTH_TOKEN_KEY = "auth_jwt_token"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val AES_KEY_ALIAS = "ru.drsn.waves.crypto.AES_WRAPPER_KEY_V2"
         private const val PREFS_FILENAME = "ru.drsn.waves.crypto.key_storage"
+        private const val USER_PROFILE_PREFS_FILENAME = "ru.drsn.waves.profile_storage"
         private const val ENCRYPTED_PRIVATE_KEY = "encrypted_private_key_ed25519"
         private const val STORED_PUBLIC_KEY = "public_key_ed25519"
         private const val USER_NICKNAME_KEY = "user_nickname_key"
@@ -63,7 +68,23 @@ class CryptoLocalDataSourceImpl @Inject constructor(
         load(null)
     }
 
-    private val sharedPreferences by lazy {
+    private val profileSharedPreferences by lazy {
+        try {
+            val masterKey = MasterKey.Builder(context, MasterKey.DEFAULT_MASTER_KEY_ALIAS + "_profile") // Другой алиас для мастер-ключа профиля
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context, USER_PROFILE_PREFS_FILENAME, masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to create EncryptedSharedPreferences for profile. Using fallback.")
+            context.getSharedPreferences(USER_PROFILE_PREFS_FILENAME + "_fallback", Context.MODE_PRIVATE)
+        }
+    }
+
+    private val cryptoSharedPreferences by lazy {
         try {
             val masterKey = MasterKey.Builder(context, MasterKey.DEFAULT_MASTER_KEY_ALIAS)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -80,6 +101,41 @@ class CryptoLocalDataSourceImpl @Inject constructor(
             Timber.tag(TAG).e(e, "Failed to create EncryptedSharedPreferences. Using fallback (Not Recommended).")
             context.getSharedPreferences(PREFS_FILENAME + "_fallback", Context.MODE_PRIVATE)
         }
+    }
+
+    override suspend fun saveProfileDisplayName(name: String): Boolean = withContext(Dispatchers.IO) {
+        try { profileSharedPreferences.edit().putString(KEY_PROFILE_DISPLAY_NAME, name).apply(); true }
+        catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка сохранения displayName"); false }
+    }
+    override suspend fun loadProfileDisplayName(): String? = withContext(Dispatchers.IO) {
+        try { profileSharedPreferences.getString(KEY_PROFILE_DISPLAY_NAME, null) }
+        catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка загрузки displayName"); null }
+    }
+    override suspend fun saveProfileStatusMessage(status: String): Boolean = withContext(Dispatchers.IO) {
+        try { profileSharedPreferences.edit().putString(KEY_PROFILE_STATUS_MESSAGE, status).apply(); true }
+        catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка сохранения statusMessage"); false }
+    }
+    override suspend fun loadProfileStatusMessage(): String? = withContext(Dispatchers.IO) {
+        try { profileSharedPreferences.getString(KEY_PROFILE_STATUS_MESSAGE, null) }
+        catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка загрузки statusMessage"); null }
+    }
+    override suspend fun saveProfileAvatarUri(uri: String): Boolean = withContext(Dispatchers.IO) {
+        try { profileSharedPreferences.edit().putString(KEY_PROFILE_AVATAR_URI, uri).apply(); true }
+        catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка сохранения avatarUri"); false }
+    }
+    override suspend fun loadProfileAvatarUri(): String? = withContext(Dispatchers.IO) {
+        try { profileSharedPreferences.getString(KEY_PROFILE_AVATAR_URI, null) }
+        catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка загрузки avatarUri"); null }
+    }
+    override suspend fun clearUserProfileData(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            profileSharedPreferences.edit()
+                .remove(KEY_PROFILE_DISPLAY_NAME)
+                .remove(KEY_PROFILE_STATUS_MESSAGE)
+                .remove(KEY_PROFILE_AVATAR_URI)
+                .apply()
+            true
+        } catch (e: Exception) { Timber.tag(TAG).e(e, "Ошибка очистки данных профиля"); false }
     }
 
     override suspend fun wrapDataWithKeystoreKey(dataToWrap: ByteArray, keystoreWrappingKeyAlias: String): ByteArray? = withContext(Dispatchers.IO) {
@@ -135,7 +191,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
     override suspend fun saveAuthToken(token: AuthToken): Boolean = withContext(Dispatchers.IO) {
         try {
-            sharedPreferences.edit().putString(AUTH_TOKEN_KEY, token).apply()
+            cryptoSharedPreferences.edit().putString(AUTH_TOKEN_KEY, token).apply()
             Timber.tag(TAG).i("Auth token сохранен.")
             true
         } catch (e: Exception) {
@@ -146,7 +202,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
     override suspend fun loadAuthToken(): AuthToken? = withContext(Dispatchers.IO) {
         try {
-            sharedPreferences.getString(AUTH_TOKEN_KEY, null).also {
+            cryptoSharedPreferences.getString(AUTH_TOKEN_KEY, null).also {
                 if (it != null) Timber.tag(TAG).d("Auth token загружен.")
                 else Timber.tag(TAG).d("Auth token не найден.")
             }
@@ -158,7 +214,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
     override suspend fun deleteAuthToken(): Boolean = withContext(Dispatchers.IO) {
         try {
-            sharedPreferences.edit().remove(AUTH_TOKEN_KEY).apply()
+            cryptoSharedPreferences.edit().remove(AUTH_TOKEN_KEY).apply()
             Timber.tag(TAG).i("Auth token удален.")
             true
         } catch (e: Exception) {
@@ -216,7 +272,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
             val base64PublicKey = Base64.encodeToString(publicKeyBytes, Base64.NO_WRAP)
 
             // 3. Сохраняем
-            sharedPreferences.edit()
+            cryptoSharedPreferences.edit()
                 .putString(ENCRYPTED_PRIVATE_KEY, base64EncryptedPrivateKey)
                 .putString(STORED_PUBLIC_KEY, base64PublicKey)
                 .apply()
@@ -224,7 +280,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
             true
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to encrypt and store $KEY_ALGORITHM key pair")
-            sharedPreferences.edit()
+            cryptoSharedPreferences.edit()
                 .remove(ENCRYPTED_PRIVATE_KEY)
                 .remove(STORED_PUBLIC_KEY)
                 .apply()
@@ -239,7 +295,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
     }
 
     private fun loadPrivateKeyInternal(): PrivateKey? {
-        val base64EncryptedData = sharedPreferences.getString(ENCRYPTED_PRIVATE_KEY, null) ?: return null
+        val base64EncryptedData = cryptoSharedPreferences.getString(ENCRYPTED_PRIVATE_KEY, null) ?: return null
         val aesSecretKey = getOrCreateAesSecretKey() ?: return null
 
         return try {
@@ -264,7 +320,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
     }
 
     private fun loadPublicKeyInternal(): PublicKey? {
-        val base64PublicKey = sharedPreferences.getString(STORED_PUBLIC_KEY, null) ?: return null
+        val base64PublicKey = cryptoSharedPreferences.getString(STORED_PUBLIC_KEY, null) ?: return null
         return try {
             val publicKeyBytes = Base64.decode(base64PublicKey, Base64.NO_WRAP)
             val keyFactory = KeyFactory.getInstance(KEY_ALGORITHM, BouncyCastleProvider.PROVIDER_NAME)
@@ -278,12 +334,12 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
 
     override suspend fun keyPairExists(): Boolean = withContext(Dispatchers.IO) {
-        sharedPreferences.contains(ENCRYPTED_PRIVATE_KEY) && sharedPreferences.contains(STORED_PUBLIC_KEY)
+        cryptoSharedPreferences.contains(ENCRYPTED_PRIVATE_KEY) && cryptoSharedPreferences.contains(STORED_PUBLIC_KEY)
     }
 
     override suspend fun deleteKeyPair(): Boolean = withContext(Dispatchers.IO) {
         try {
-            sharedPreferences.edit()
+            cryptoSharedPreferences.edit()
                 .remove(ENCRYPTED_PRIVATE_KEY)
                 .remove(STORED_PUBLIC_KEY)
                 .apply()
@@ -304,7 +360,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
     override suspend fun saveUserNickname(nickname: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            sharedPreferences.edit().putString(USER_NICKNAME_KEY, nickname).apply()
+            cryptoSharedPreferences.edit().putString(USER_NICKNAME_KEY, nickname).apply()
             Timber.tag(TAG).i("Никнейм пользователя '$nickname' сохранен.")
             true
         } catch (e: Exception) {
@@ -315,7 +371,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
     override suspend fun loadUserNickname(): String? = withContext(Dispatchers.IO) {
         try {
-            sharedPreferences.getString(USER_NICKNAME_KEY, null).also {
+            cryptoSharedPreferences.getString(USER_NICKNAME_KEY, null).also {
                 if (it != null) Timber.tag(TAG).d("Никнейм пользователя '$it' загружен.")
                 else Timber.tag(TAG).d("Сохраненный никнейм пользователя не найден.")
             }
@@ -327,7 +383,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
     override suspend fun deleteUserNickname(): Boolean = withContext(Dispatchers.IO) {
         try {
-            sharedPreferences.edit().remove(USER_NICKNAME_KEY).apply()
+            cryptoSharedPreferences.edit().remove(USER_NICKNAME_KEY).apply()
             Timber.tag(TAG).i("Никнейм пользователя удален.")
             true
         } catch (e: Exception) {
@@ -338,7 +394,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
     override suspend fun saveEncryptedChatKey(encryptedChatKeyB64: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            sharedPreferences.edit().putString(ENCRYPTED_CHAT_ENCRYPTION_KEY, encryptedChatKeyB64).apply()
+            cryptoSharedPreferences.edit().putString(ENCRYPTED_CHAT_ENCRYPTION_KEY, encryptedChatKeyB64).apply()
             Timber.tag(TAG).i("Зашифрованный ключ шифрования чатов (CEK) сохранен.")
             true
         } catch (e: Exception) {
@@ -349,7 +405,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
     override suspend fun loadEncryptedChatKey(): String? = withContext(Dispatchers.IO) {
         try {
-            sharedPreferences.getString(ENCRYPTED_CHAT_ENCRYPTION_KEY, null).also {
+            cryptoSharedPreferences.getString(ENCRYPTED_CHAT_ENCRYPTION_KEY, null).also {
                 if (it != null) Timber.tag(TAG).d("Зашифрованный CEK загружен.")
                 else Timber.tag(TAG).d("Зашифрованный CEK не найден.")
             }
@@ -361,7 +417,7 @@ class CryptoLocalDataSourceImpl @Inject constructor(
 
     override suspend fun deleteEncryptedChatKey(): Boolean = withContext(Dispatchers.IO) {
         try {
-            sharedPreferences.edit().remove(ENCRYPTED_CHAT_ENCRYPTION_KEY).apply()
+            cryptoSharedPreferences.edit().remove(ENCRYPTED_CHAT_ENCRYPTION_KEY).apply()
             Timber.tag(TAG).i("Зашифрованный CEK удален.")
             true
         } catch (e: Exception) {

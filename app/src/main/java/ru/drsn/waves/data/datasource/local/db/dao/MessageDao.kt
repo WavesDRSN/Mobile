@@ -87,4 +87,13 @@ interface MessageDao {
      */
     @Query("DELETE FROM messages")
     suspend fun clearAllMessages()
+
+    @Query("SELECT * FROM messages WHERE file_transfer_id = :fileTransferId LIMIT 1")
+    suspend fun findMessageByFileTransferId(fileTransferId: String): MessageEntity? // Ищем по fileTransferId
+
+    @Query("UPDATE messages SET status = :newStatus WHERE file_transfer_id = :fileTransferId")
+    suspend fun updateMessageStatusByFileTransferId(fileTransferId: String, newStatus: String)
+
+    @Query("UPDATE messages SET media_local_path = :localPath, status = :newStatus WHERE message_id = :messageId")
+    suspend fun updateMessageLocalPathAndStatus(messageId: String, localPath: String?, newStatus: String)
 }
