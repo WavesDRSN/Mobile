@@ -39,8 +39,6 @@ class ChatInfoActivity : AppCompatActivity() {
 
     private val viewModel: ChatInfoViewModel by viewModels()
     private lateinit var binding: ActivityChatInfoBinding
-    private lateinit var linearLayoutManager: LinearLayoutManager
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityChatInfoBinding.inflate(layoutInflater)
@@ -74,7 +72,9 @@ class ChatInfoActivity : AppCompatActivity() {
 
                                 if (profile.avatarUri != null) {
                                     val imageUri = Uri.parse(profile.avatarUri)
-                                    if (imageUri != null) binding.profileInfoLayout.profileAvatarView.setImageURI(imageUri)
+                                    if (imageUri != null) {
+                                        binding.profileInfoLayout.profileAvatarView.setImageURI(imageUri)
+                                    }
                                 }
 
                                 binding.profileInfoLayout.nameTextView.text = profile.displayName
@@ -105,10 +105,5 @@ class ChatInfoActivity : AppCompatActivity() {
             }
             else -> super.onOptionsItemSelected(item)
         }
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menuInflater.inflate(R.menu.toolbar_chat_menu, menu)
-        return true
     }
 }

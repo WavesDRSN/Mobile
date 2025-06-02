@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="ru.drsn.waves" />
+                  <option name="mobileSdkAppId" value="1:956860742318:android:64390076b587be9dc10b3f" />
+                  <option name="projectId" value="p2p-messanger" />
+                  <option name="projectNumber" value="956860742318" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

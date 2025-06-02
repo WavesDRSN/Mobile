@@ -26,4 +26,5 @@
     <string name="default_id">\@Waves</string>
     <string name="username">Username</string>
     <string name="bio">Bio</string>
+    <string name="sent_image_description">Отправленное сообщение\n</string>
 </resources>

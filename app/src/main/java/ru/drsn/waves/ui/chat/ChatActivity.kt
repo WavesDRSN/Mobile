@@ -1,18 +1,22 @@
 package ru.drsn.waves.ui.chat
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.bumptech.glide.Glide
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import ru.drsn.waves.R
@@ -60,6 +64,8 @@ class ChatActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbarChat)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         // Заголовок будет установлен из ViewModel
+
+
         supportActionBar?.title = ""
     }
 
@@ -89,7 +95,30 @@ class ChatActivity : AppCompatActivity() {
         binding.sendButton.setOnClickListener {
             viewModel.sendMessage()
         }
-        // TODO: Обработка attachButton
+        binding.toolbarChatImageButton.setOnClickListener{
+            val intent = ChatInfoActivity.newIntent(this@ChatActivity, viewModel.sessionId, viewModel.chatTypeFromArgs)
+            startActivity(intent)
+        }
+        binding.attachButton.setOnClickListener {
+            val intent = Intent(Intent.ACTION_PICK)
+            intent.type = "image/*"
+            imagePickerLauncher.launch(intent)
+        }
+    }
+
+    private val imagePickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val selectedImageUri: Uri? = result.data?.data
+            if (selectedImageUri != null) {
+                Timber.d("Выбрано изображение для аватара: $selectedImageUri")
+                // TODO: viewModel.onAvatarSelected(selectedImageUri)
+                // Пока просто отобразим его
+                lifecycleScope.launch {
+                    viewModel.onSendAttach(selectedImageUri)
+                }
+                // Пример обновления URI в ViewModel
+            }
+        }
     }
 
     private fun observeViewModel() {
@@ -103,6 +132,12 @@ class ChatActivity : AppCompatActivity() {
                         when (state) {
                             is ChatUiState.Success -> {
                                 binding.toolbarTitle.text = state.chatSessionDetails?.peerName ?: viewModel.sessionId
+                                Glide.with(this@ChatActivity)
+                                    .load(state.chatSessionDetails?.peerAvatarUrl)
+                                    .placeholder(R.drawable.ic_default_profile)
+                                    .error(R.drawable.ic_default_profile)
+                                    .circleCrop()
+                                    .into(binding.toolbarChatImageButton)
 
                                 // Инициализируем или обновляем адаптер, если currentUserId доступен
                                 val currentUserId = (viewModel.getUserNicknameUseCase() as? Result.Success)?.value
@@ -124,7 +159,9 @@ class ChatActivity : AppCompatActivity() {
                             is ChatUiState.Error -> {
                                 Toast.makeText(this@ChatActivity, state.message, Toast.LENGTH_LONG).show()
                             }
-                            is ChatUiState.Loading -> { /* Уже обработано ProgressBar */ }
+                            is ChatUiState.Loading -> {
+                                binding.toolbarChatImageButton.setImageURI(viewModel.imageUri)
+                            }
                         }
                     }
                 }
@@ -156,8 +193,4 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menuInflater.inflate(R.menu.toolbar_chat_menu, menu)
-        return true
-    }
 }

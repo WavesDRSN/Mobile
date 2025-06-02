@@ -36,6 +36,17 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
+            <ImageButton
+                android:id="@+id/toolbar_chat_image_button"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:scaleType="fitCenter"
+                android:layout_gravity="end"
+                android:layout_marginEnd="16dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_default_avatar" />
+
+
         </androidx.appcompat.widget.Toolbar>
 
     </com.google.android.material.appbar.AppBarLayout>

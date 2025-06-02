@@ -109,7 +109,6 @@ class ChatListActivity : AppCompatActivity(), NavigationView.OnNavigationItemSel
         }
         return when (item.itemId) {
             R.id.action_profile -> {
-                Toast.makeText(this, getString(R.string.profile_clicked_toast), Toast.LENGTH_SHORT).show()
                 val intent = ProfileActivity.newIntent(this@ChatListActivity)
                 startActivity(intent)
                 true
@@ -133,12 +132,12 @@ class ChatListActivity : AppCompatActivity(), NavigationView.OnNavigationItemSel
         binding.bottomNavigationView.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.navigation_chats -> true
+                /*
                 R.id.navigation_calls -> {
                     Toast.makeText(this, "Переход на Звонки", Toast.LENGTH_SHORT).show()
                     true
-                }
+                }*/
                 R.id.navigation_profile -> {
-                    Toast.makeText(this, "Переход на Профиль", Toast.LENGTH_SHORT).show()
                     val intent = ProfileActivity.newIntent(this@ChatListActivity)
                     startActivity(intent)
                     true
@@ -217,7 +216,12 @@ class ChatListActivity : AppCompatActivity(), NavigationView.OnNavigationItemSel
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            // R.id.nav_item_settings -> Toast.makeText(this, "Настройки нажаты", Toast.LENGTH_SHORT).show()
+            R.id.nav_item_settings ->
+            {
+                val intent = ProfileActivity.newIntent(this@ChatListActivity)
+                startActivity(intent)
+                return true
+            }
             // R.id.nav_item_logout -> { /* TODO: viewModel.logout() */ }
             R.id.nav_item_new_chat -> {
                 Timber.d("Нажат пункт меню 'Создать чат'")
