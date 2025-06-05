@@ -10,6 +10,7 @@ import ru.drsn.waves.domain.model.chat.MessageType
 import ru.drsn.waves.domain.model.utils.Result
 import ru.drsn.waves.domain.model.chat.ChatError
 import ru.drsn.waves.domain.model.chat.MediaMetadata
+import ru.drsn.waves.domain.model.profile.DomainUserProfile
 
 interface IChatRepository {
 
@@ -57,31 +58,10 @@ interface IChatRepository {
      */
     suspend fun sendMediaMessage(
         sessionId: String,
-        localMediaUri: String, // Используем String для URI, т.к. android.net.Uri не для domain слоя
+        localMediaUriString: String, // Используем String для URI, т.к. android.net.Uri не для domain слоя
         messageType: MessageType,
         originalFileName: String?,
         localMessageId: String
-    ): Result<DomainMessage, ChatError>
-
-
-    /**
-     * Вызывается при получении нового сообщения извне (например, через WebRTC).
-     * Сохраняет сообщение в локальную БД.
-     * @param message Входящее сообщение (уже в доменной модели, но с зашифрованным контентом, если так приходит).
-     * Или это может быть более "сырая" модель, требующая преобразования.
-     * Для простоты предположим, что контент приходит как есть, и здесь он шифруется/сохраняется.
-     * Или, если WebRTC уже передает байты, то здесь они сохраняются как есть (уже зашифрованные отправителем).
-     * **Уточнение:** Для E2EE сообщения приходят зашифрованными, и мы их сохраняем как есть.
-     * Дешифровка происходит при чтении для отображения.
-     */
-    suspend fun saveIncomingMessage(
-        sessionId: String,
-        senderId: String,
-        encryptedContent: ByteArray, // Предполагаем, что по WebRTC приходят уже зашифрованные байты
-        timestamp: Long,
-        messageId: String, // ID от отправителя
-        messageType: MessageType,
-        mediaMetadata: MediaMetadata? = null // Опциональные метаданные для медиа
     ): Result<DomainMessage, ChatError>
 
 
@@ -131,5 +111,23 @@ interface IChatRepository {
      * @param sessionId ID сессии чата.
      */
     suspend fun deleteChatSession(sessionId: String): Result<Unit, ChatError>
+
+    suspend fun updateChatSessionProfileInfo(
+        sessionId: String,
+        newPeerName: String,
+        newPeerDescription: String?,
+        newPeerAvatarUrl: String?,
+        profileTimestamp: Long? // НОВЫЙ ПАРАМЕТР
+    ): Result<Unit, ChatError>
+
+    suspend fun getSessionInfo(sessionId: String): Result<DomainUserProfile, ChatError>
+
+    /**
+     * Отправляет информацию о профиле текущего пользователя указанному пиру.
+     * Если профиль содержит локальный аватар, инициирует его P2P передачу.
+     * @param targetPeerId ID пира-получателя.
+     * @param profile Данные профиля текущего пользователя для отправки.
+     */
+    suspend fun sendMyProfileInfoToPeer(targetPeerId: String, profile: DomainUserProfile): Result<Unit, ChatError>
 }
 

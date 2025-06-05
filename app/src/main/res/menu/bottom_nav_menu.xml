@@ -5,10 +5,12 @@
         android:id="@+id/navigation_chats"
         android:icon="@drawable/ic_chats"
         android:title="@string/bottom_nav_chats" />
+    <!---
     <item
         android:id="@+id/navigation_calls"
         android:icon="@drawable/ic_call"
         android:title="@string/bottom_nav_calls" />
+        -->
     <item
         android:id="@+id/navigation_profile"
         android:icon="@drawable/ic_profile"

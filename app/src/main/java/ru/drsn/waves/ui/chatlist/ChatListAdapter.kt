@@ -1,5 +1,6 @@
 package ru.drsn.waves.ui.chatlist
 
+import android.net.Uri
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
@@ -50,7 +51,11 @@ class ChatListAdapter(
 
             // Установка аватара (здесь можно добавить логику для загрузки URL, если peerAvatarUrl не null)
             // Пока используем дефолтный
-            binding.avatarImageView.setImageResource(R.drawable.ic_default_avatar)
+            if (session.peerAvatarUrl == null) {
+                binding.avatarImageView.setImageResource(R.drawable.ic_default_avatar)
+            } else {
+                binding.avatarImageView.setImageURI(Uri.parse(session.peerAvatarUrl))
+            }
 
 
             binding.root.setOnClickListener {

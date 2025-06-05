@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.google.dagger.hilt)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.google.gms.services)
+    alias(libs.plugins.androidx.room)
 }
 
 kotlin {
@@ -35,6 +36,9 @@ android {
             )
         }
     }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.3"
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
@@ -45,6 +49,7 @@ android {
     buildFeatures {
         viewBinding = true
         buildConfig = true
+        compose = true
     }
     buildTypes {
         release {
@@ -57,6 +62,9 @@ android {
 }
 
 dependencies {
+
+    implementation(libs.circleimageview)
+    implementation(libs.glide)
 
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)
@@ -122,6 +130,9 @@ dependencies {
 
 }
 
+room {
+    schemaDirectory("$projectDir/schemas")
+}
 
 protobuf {
     protoc {

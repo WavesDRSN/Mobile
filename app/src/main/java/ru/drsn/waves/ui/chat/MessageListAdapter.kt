@@ -1,5 +1,6 @@
 package ru.drsn.waves.ui.chat
 
+import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -10,6 +11,7 @@ import ru.drsn.waves.databinding.ListItemMessageReceivedBinding
 import ru.drsn.waves.databinding.ListItemMessageSentBinding
 import ru.drsn.waves.domain.model.chat.DomainMessage
 import ru.drsn.waves.domain.model.chat.ChatType // Для определения, показывать ли имя отправителя
+import ru.drsn.waves.domain.model.chat.MessageType
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -71,8 +73,16 @@ class MessageListAdapter(
         private val timeFormatter: SimpleDateFormat
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(message: DomainMessage) {
-            binding.messageTextSent.text = message.content
-            binding.timestampTextSent.text = timeFormatter.format(Date(message.timestamp))
+            if (message.messageType == MessageType.TEXT) {
+                binding.textViewMessage.text = message.content
+                binding.textViewMessage.visibility = View.VISIBLE
+            }
+            else if (message.messageType == MessageType.IMAGE) {
+                binding.imageViewMessage.setImageURI(Uri.parse(message.mediaUri))
+                binding.imageViewMessage.visibility = View.VISIBLE
+            }
+            binding.textViewTimestamp.text = timeFormatter.format(Date(message.timestamp))
+            binding.textViewTimestamp.visibility = View.VISIBLE
             // TODO: Отображение статуса сообщения (галочки)
         }
     }
@@ -83,17 +93,24 @@ class MessageListAdapter(
         private val chatType: ChatType
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(message: DomainMessage) {
-            binding.messageTextReceived.text = message.content
-            binding.timestampTextReceived.text = timeFormatter.format(Date(message.timestamp))
+            if (message.messageType == MessageType.TEXT) {
+                binding.textViewMessage.text = message.content
+                binding.textViewMessage.visibility = View.VISIBLE
+            } else if (message.messageType == MessageType.IMAGE && message.mediaUri != null) {
+
+                val imageUri = Uri.parse(message.mediaUri)
+
+                if (imageUri != null) {
+                    binding.imageViewMessage.setImageURI(imageUri)
+                    binding.imageViewMessage.visibility = View.VISIBLE
+                }
+            }
+            binding.textViewTimestamp.text = timeFormatter.format(Date(message.timestamp))
+            binding.textViewTimestamp.visibility = View.VISIBLE
 
             if (chatType == ChatType.GROUP) {
-                binding.senderNameTextReceived.text = message.senderId // Или более дружелюбное имя, если есть
-                binding.senderNameTextReceived.visibility = View.VISIBLE
-                binding.avatarImageViewReceived.visibility = View.VISIBLE // Показываем аватар в группе
                 // TODO: Загрузка аватара для binding.avatarImageViewReceived
             } else {
-                binding.senderNameTextReceived.visibility = View.GONE
-                binding.avatarImageViewReceived.visibility = View.GONE // Скрываем аватар в личном чате
             }
         }
     }

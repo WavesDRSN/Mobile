@@ -49,6 +49,9 @@ data class MessageEntity(
     @ColumnInfo(name = "message_type") // "text", "image", "video", "audio", "file", "system"
     val messageType: String,
 
+    @ColumnInfo(name = "file_transfer_id", index = true)
+    val fileTransferId: String? = null,
+
     // Поля для медиа (опционально, можно вынести в отдельную таблицу, если медиа много)
     @ColumnInfo(name = "media_local_path")
     val mediaLocalPath: String? = null, // Локальный путь к медиафайлу

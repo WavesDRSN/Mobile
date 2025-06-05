@@ -38,4 +38,8 @@
     <string name="notification_contact_request_body_suffix">хочет добавить вас в контакты.</string>
     <string name="notification_generic_body">У вас новое уведомление.</string>
     <string name="notification_unknown_event_type">Неизвестное событие</string>
+    <string name="default_id">\@Waves</string>
+    <string name="username">Username</string>
+    <string name="bio">Bio</string>
+    <string name="sent_image_description">Отправленное сообщение\n</string>
 </resources>

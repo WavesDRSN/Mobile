@@ -71,4 +71,5 @@ interface IWebRTCRepository {
      * Возвращает множество ID всех пиров, с которыми установлено или устанавливается соединение.
      */
     fun getActivePeers(): Set<PeerId>
+    suspend fun isDataChannelReady(peerId: PeerId): Boolean
 }

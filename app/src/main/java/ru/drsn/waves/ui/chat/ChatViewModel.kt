@@ -2,6 +2,7 @@ package ru.drsn.waves.ui.chat
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
@@ -37,7 +38,9 @@ class ChatViewModel @Inject constructor(
     private val sendMessageUseCase: SendTextMessageUseCase, // Пока только текстовые
     private val getOrCreateChatSessionUseCase: GetOrCreateChatSessionUseCase,
     val getUserNicknameUseCase: GetUserNicknameUseCase,
-    private val markMessagesAsReadUseCase: MarkMessagesAsReadUseCase
+    private val markMessagesAsReadUseCase: MarkMessagesAsReadUseCase,
+    private val getSessionInfoUseCase: GetSessionInfoUseCase,
+    private val sendMediaMessageUseCase: SendMediaMessageUseCase
     // private val loadMoreMessagesUseCase: LoadMoreMessagesUseCase // Для пагинации
 ) : ViewModel() {
 
@@ -45,6 +48,7 @@ class ChatViewModel @Inject constructor(
     val peerNameFromArgs: String? = savedStateHandle.get<String>("peer_name") // Может быть null, если это новый чат
     val chatTypeFromArgs: ChatType = savedStateHandle.get<String>("chat_type")
         ?.let { ChatType.valueOf(it) } ?: ChatType.PEER_TO_PEER // По умолчанию личный чат
+    var imageUri: Uri? = null
 
     private val _uiState = MutableStateFlow<ChatUiState>(ChatUiState.Loading)
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -62,8 +66,20 @@ class ChatViewModel @Inject constructor(
                 _uiState.value = ChatUiState.Error("Не удалось определить текущего пользователя.")
                 return@launch
             }
+            val infoResult = getSessionInfoUseCase(sessionId)
+            if (infoResult is Result.Success) {
+                if (infoResult.value.avatarUri != null) {
+                    imageUri = Uri.parse(infoResult.value.avatarUri)
+                    Timber.d(imageUri.toString())
+                }
+            }
             loadChatDetailsAndMessages()
         }
+    }
+
+
+    suspend fun onSendAttach(imageUri: Uri?) {
+        sendMediaMessageUseCase(sessionId, imageUri.toString(), MessageType.IMAGE, null)
     }
 
     private fun loadChatDetailsAndMessages() {
