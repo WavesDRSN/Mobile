@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:showIn="navigation_view">
+    <!-- ЭТО ВРЕМЕННОЕ МЕНЮ -->
+    <group>
+        <item
+            android:id="@+id/nav_item_settings"
+            android:icon="@android:drawable/ic_menu_preferences"
+            android:title="Настройки" />
+        <item
+            android:id="@+id/nav_item_new_chat"
+            android:icon="@android:drawable/ic_menu_add"
+            android:title="Новый чат" />
+    </group>
+</menu>

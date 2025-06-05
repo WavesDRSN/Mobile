@@ -22,6 +22,8 @@ service Authorisation {
   rpc RequestChallenge (ChallengeRequest) returns (ChallengeResponse);
 
   rpc Authentication (AuthenticationRequest) returns (AuthenticationResponse);
+
+  rpc UpdateFcmToken (UpdateTokenRequest) returns (UpdateTokenResponse);
 }
 
 
@@ -68,8 +70,17 @@ message AuthenticationRequest {
 
 /* Ответ на авторизацию. По сути совпадает с логикой при ответе на запрос регистрации. */
 message AuthenticationResponse {
-  bool success = 1;
-  string error_message = 2;
-  string token = 3; // возможно, в будущем будет убран. здесь можно передавать например JWT, который позволит пользователю общаться с сервером.
-  // JWT - хороший подход для использования спринг секьюрити, можно будет удобно закрыть все сервисы за ним.
+    bool success = 1;
+    string token = 2;
+    string user_id = 3;
+    string error_message = 4;
+}
+
+message UpdateTokenRequest {
+    string fcm_token = 1;
+}
+
+message UpdateTokenResponse {
+    bool success = 1;
+    string error_message = 2;
 }
