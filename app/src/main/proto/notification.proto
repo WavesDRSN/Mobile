@@ -8,6 +8,13 @@ service NotificationService {
   // Отправляет data-only уведомление конкретному устройству (через FCM токен)
   // или в топик.
   rpc SendNotification (NotificationRequest) returns (NotificationResponse);
+
+  rpc NotifyServer (MessageEvent) returns (NotificationResponse);
+}
+
+message MessageEvent {
+  string sender_id = 1;
+  string receiver_id = 2;
 }
 
 // Запрос на отправку уведомления

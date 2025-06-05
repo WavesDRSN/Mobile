@@ -12,6 +12,7 @@ import ru.drsn.waves.domain.repository.IAuthenticationRepository
 import ru.drsn.waves.domain.usecase.fcm.ProcessFcmMessageUseCase
 import ru.drsn.waves.domain.usecase.fcm.RegisterFcmTokenUseCase
 import gRPC.v1.Authentication.AuthorisationGrpcKt // Для FcmRemoteDataSource
+import gRPC.v1.Notification.NotificationServiceGrpcKt
 import ru.drsn.waves.domain.repository.ICryptoRepository
 import javax.inject.Singleton
 
@@ -47,8 +48,11 @@ object FcmProvidesModule {
      */
     @Provides
     @Singleton
-    fun provideFcmRemoteDataSource(authorisationStub: AuthorisationGrpcKt.AuthorisationCoroutineStub): FcmRemoteDataSource {
-        return FcmRemoteDataSource(authorisationStub)
+    fun provideFcmRemoteDataSource(
+        authorisationStub: AuthorisationGrpcKt.AuthorisationCoroutineStub,
+        notificationStub: NotificationServiceGrpcKt.NotificationServiceCoroutineStub
+    ): FcmRemoteDataSource {
+        return FcmRemoteDataSource(authorisationStub, notificationStub)
     }
 
     /**

@@ -2,7 +2,10 @@ package ru.drsn.waves.data.datasource.remote.fcm
 
 import gRPC.v1.Authentication.AuthorisationGrpcKt
 import gRPC.v1.Authentication.UpdateTokenRequest
-import gRPC.v1.Authentication.UpdateTokenResponse // gRPC сгенерированный тип
+import gRPC.v1.Authentication.UpdateTokenResponse
+import gRPC.v1.Notification.NotificationServiceGrpcKt
+import gRPC.v1.Notification.MessageEvent
+import gRPC.v1.Notification.NotificationResponse
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -14,7 +17,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class FcmRemoteDataSource @Inject constructor(
-    private val authorisationStub: AuthorisationGrpcKt.AuthorisationCoroutineStub
+    private val authorisationStub: AuthorisationGrpcKt.AuthorisationCoroutineStub,
+    private val notificationStub: NotificationServiceGrpcKt.NotificationServiceCoroutineStub
 ) {
 
     /**
@@ -33,4 +37,23 @@ class FcmRemoteDataSource @Inject constructor(
         // Вызов gRPC метода. AuthInterceptor автоматически добавит JWT, если он есть.
         return authorisationStub.updateFcmToken(request)
     }
+
+    /**
+     * Уведомляет сервер о том, что необходимо отправить push-уведомление получателю
+     * о новом сообщении, которое не удалось доставить напрямую через P2P соединение.
+     *
+     * @param senderId ID пользователя-отправителя сообщения
+     * @param receiverId ID пользователя-получателя сообщения
+     * @return [NotificationResponse] Ответ от сервера о результате отправки уведомления
+     * @throws io.grpc.StatusRuntimeException если произошла ошибка во время gRPC вызова
+     */
+    suspend fun notifyPendingMessage(senderId: String, receiverId: String): NotificationResponse {
+        val messageEvent = MessageEvent.newBuilder()
+            .setSenderId(senderId)
+            .setReceiverId(receiverId)
+            .build()
+
+        return notificationStub.notifyServer(messageEvent)
+    }
+
 }

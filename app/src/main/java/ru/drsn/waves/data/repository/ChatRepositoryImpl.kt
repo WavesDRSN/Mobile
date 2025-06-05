@@ -25,6 +25,7 @@ import ru.drsn.waves.data.datasource.local.db.dao.ChatSessionDao
 import ru.drsn.waves.data.datasource.local.db.dao.MessageDao
 import ru.drsn.waves.data.datasource.local.db.entity.ChatSessionEntity
 import ru.drsn.waves.data.datasource.local.db.entity.MessageEntity
+import ru.drsn.waves.data.datasource.remote.fcm.FcmRemoteDataSource
 import ru.drsn.waves.di.IoDispatcher
 import ru.drsn.waves.domain.model.utils.Result // Общий Result
 import ru.drsn.waves.domain.model.chat.* // Все доменные модели чата
@@ -65,6 +66,7 @@ class ChatRepositoryImpl @Inject constructor(
     private val chatCompressor: IChatCompressor, // Для сжатия/разжатия
     private val cryptoRepository: ICryptoRepository,
     private val webRTCRepository: IWebRTCRepository,
+    private val fcmRemoteDataSource: FcmRemoteDataSource,
     @IoDispatcher private val defaultDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : IChatRepository {
 
@@ -564,6 +566,7 @@ class ChatRepositoryImpl @Inject constructor(
                 pendingP2pEnvelopesQueue.computeIfAbsent(targetPeerId) { mutableListOf() }
                     .add(P2pEnvelopeQueueItem(envelopeJson, associatedLocalMessageId))
             }
+            fcmRemoteDataSource.notifyPendingMessage(currentUserId, targetPeerId)
             webRTCRepository.initiateCall(PeerId(targetPeerId))
             // Статус в БД для associatedLocalMessageId остается SENDING
             return Result.Success(Unit) // Сообщение поставлено в очередь

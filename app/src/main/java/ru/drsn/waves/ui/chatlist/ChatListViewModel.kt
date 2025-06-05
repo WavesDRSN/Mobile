@@ -50,7 +50,7 @@ class ChatListViewModel @Inject constructor(
         viewModelScope.launch {
             val result = getCurrentUsernameUseCase()
             if (result is Result.Success) {
-                connectToSignalingUseCase(result.value, "tt.vld.su", 50051)
+                connectToSignalingUseCase(result.value, "10.0.2.2", 50051)
                 initializeWebRTCUseCase()
                 currentUsername = result.value
             }
