@@ -21,7 +21,7 @@ class AuthenticationRepositoryImpl @Inject constructor(
 
 
     init {
-        if (!remoteDataSource.isConnected()) remoteDataSource.setupConnection("tt.vld.su", 50051)
+        if (!remoteDataSource.isConnected()) remoteDataSource.setupConnection("10.0.2.2", 50051)
     }
 
     override suspend fun reserveNickname(nickname: String): Result<NicknameReservation, AuthError> {
