@@ -1,8 +1,10 @@
 package ru.drsn.waves.ui.chatlist
 
+import android.content.Context // <-- Import Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext // <-- Import ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,20 +26,24 @@ import ru.drsn.waves.domain.usecase.crypto.GetUserNicknameUseCase
 import timber.log.Timber
 import javax.inject.Inject
 import ru.drsn.waves.domain.model.utils.Result
+import ru.drsn.waves.domain.usecase.fcm.RegisterFcmTokenUseCase // <-- Import RegisterFcmTokenUseCase
 import ru.drsn.waves.domain.usecase.profile.LoadUserProfileUseCase
 import ru.drsn.waves.domain.usecase.signaling.ConnectToSignalingUseCase
 import ru.drsn.waves.domain.usecase.signaling.GetActiveUsers
 import ru.drsn.waves.domain.usecase.webrtc.InitializeWebRTCUseCase
+import ru.drsn.waves.services.fcm.MyFirebaseMessagingService // <-- Import for SharedPreferences constants
 
 @HiltViewModel
 class ChatListViewModel @Inject constructor(
+    @ApplicationContext private val applicationContext: Context, // <-- Inject Context
     private val observeChatSessionsUseCase: ObserveChatSessionsUseCase,
     private val getOrCreateChatSessionForNavUseCase: GetOrCreateChatSessionForNavUseCase,
     private val getCurrentUsernameUseCase: GetUserNicknameUseCase,
     private val connectToSignalingUseCase: ConnectToSignalingUseCase,
     private val initializeWebRTCUseCase: InitializeWebRTCUseCase,
     private val getActiveUsers: GetActiveUsers,
-    private val loadUserProfileUseCase: LoadUserProfileUseCase
+    private val loadUserProfileUseCase: LoadUserProfileUseCase,
+    private val registerFcmTokenUseCase: RegisterFcmTokenUseCase // <-- Inject RegisterFcmTokenUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ChatListUiState>(ChatListUiState.Loading)
@@ -50,7 +56,22 @@ class ChatListViewModel @Inject constructor(
         viewModelScope.launch {
             val result = getCurrentUsernameUseCase()
             if (result is Result.Success) {
-                connectToSignalingUseCase(result.value, "10.0.2.2", 50051)
+                currentUsername = result.value
+                Timber.i("ChatListViewModel: Пользователь '${currentUsername}' определен.")
+
+                // --- TRIGGER FCM TOKEN REGISTRATION ---
+                val fcmToken = getFcmTokenFromPrefs(applicationContext)
+                if (fcmToken.isNullOrEmpty()) {
+                    Timber.w("ChatListViewModel init: FCM токен не найден в SharedPreferences. Регистрация отложена/пропущена.")
+                } else {
+                    Timber.i("ChatListViewModel init: Попытка регистрации FCM токена: ${fcmToken.takeLast(10)}...")
+                    // Assuming your RegisterFcmTokenUseCase now returns a Result
+                    registerFcmTokenUseCase.execute(fcmToken)
+                }
+                // --- END FCM TOKEN REGISTRATION ---
+
+                // Continue with other initializations that depend on username
+                connectToSignalingUseCase(currentUsername!!, "10.0.2.2", 50051) // currentUsername is now guaranteed non-null here
                 initializeWebRTCUseCase()
                 currentUsername = result.value
             }
@@ -59,6 +80,11 @@ class ChatListViewModel @Inject constructor(
             }
         }
         observeChatSessions()
+    }
+
+    private fun getFcmTokenFromPrefs(context: Context): String? {
+        val prefs = context.getSharedPreferences(MyFirebaseMessagingService.PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(MyFirebaseMessagingService.KEY_FCM_TOKEN, null)
     }
 
     private fun observeChatSessions() {

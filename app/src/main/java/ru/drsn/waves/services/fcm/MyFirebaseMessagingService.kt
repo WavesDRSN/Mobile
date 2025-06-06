@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import ru.drsn.waves.domain.usecase.fcm.ProcessFcmMessageUseCase
 import ru.drsn.waves.domain.usecase.fcm.RegisterFcmTokenUseCase
 import timber.log.Timber
+import android.content.Context
 import javax.inject.Inject
 
 /**
@@ -43,8 +44,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
      */
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Timber.tag(TAG).d("Refreshed FCM token: $token")
-        serviceScope.launch {
+        Timber.d("New FCM token received: ${token.takeLast(10)}...")
+        saveFcmTokenToPrefs(applicationContext, token)
+        /*serviceScope.launch {
             try {
                 // Инициируем процесс регистрации/обновления токена на бэкенд-сервере.
                 registerFcmTokenUseCase.execute(token)
@@ -53,7 +55,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 Timber.tag(TAG).e(e, "Failed to initiate FCM token registration")
                 // Здесь можно добавить логику для сохранения токена и повторной отправки позже.
             }
-        }
+        }*/
     }
 
     /**
@@ -104,7 +106,19 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         serviceJob.cancel() // Отменяет все корутины в serviceScope
     }
 
+    private fun saveFcmTokenToPrefs(context: Context, token: String?) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_FCM_TOKEN, token).apply()
+        if (token != null) {
+            Timber.i("FCM token saved to SharedPreferences: ${token.takeLast(10)}...")
+        } else {
+            Timber.i("FCM token cleared from SharedPreferences.")
+        }
+    }
+
     companion object {
+        const val PREFS_NAME = "FcmPrefs"
+        const val KEY_FCM_TOKEN = "latest_fcm_token"
         private const val TAG = "MyFirebaseMsgService"
     }
 }
