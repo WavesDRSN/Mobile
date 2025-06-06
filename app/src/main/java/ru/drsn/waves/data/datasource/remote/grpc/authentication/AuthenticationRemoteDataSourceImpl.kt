@@ -4,12 +4,14 @@ import com.google.protobuf.ByteString
 import gRPC.v1.Authentication.ChallengeResponse
 import gRPC.v1.Authentication.UpdateTokenRequest
 import io.grpc.StatusRuntimeException
+import ru.drsn.waves.data.datasource.remote.grpc.AuthTokenInterceptor
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class AuthenticationRemoteDataSourceImpl @Inject constructor(
+    private val authTokenInterceptor: AuthTokenInterceptor
 ) : IAuthenticationRemoteDataSource {
 
     private var authenticationClient: AuthenticationClient? = null
@@ -18,7 +20,7 @@ class AuthenticationRemoteDataSourceImpl @Inject constructor(
         if (authenticationClient == null) {
             try {
                 // Создаем клиент здесь (или получаем из фабрики)
-                authenticationClient = AuthenticationClient(serverAddress, serverPort)
+                authenticationClient = AuthenticationClient(serverAddress, serverPort, authTokenInterceptor)
             } catch (e: Exception) {
                 // Логирование ошибки
                 throw IOException("Failed to initialize AuthenticationClient", e)

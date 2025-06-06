@@ -1,4 +1,4 @@
-package ru.drsn.waves.data.datasource.remote.grpc.signaling // Или другой подходящий пакет
+package ru.drsn.waves.data.datasource.remote.grpc // Или другой подходящий пакет
 
 import io.grpc.CallOptions
 import io.grpc.Channel

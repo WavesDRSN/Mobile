@@ -59,6 +59,11 @@ class ChatListViewModel @Inject constructor(
                 currentUsername = result.value
                 Timber.i("ChatListViewModel: Пользователь '${currentUsername}' определен.")
 
+                // Continue with other initializations that depend on username
+                connectToSignalingUseCase(currentUsername!!, "10.0.2.2", 50051) // currentUsername is now guaranteed non-null here
+                initializeWebRTCUseCase()
+                currentUsername = result.value
+
                 // --- TRIGGER FCM TOKEN REGISTRATION ---
                 val fcmToken = getFcmTokenFromPrefs(applicationContext)
                 if (fcmToken.isNullOrEmpty()) {
@@ -70,10 +75,7 @@ class ChatListViewModel @Inject constructor(
                 }
                 // --- END FCM TOKEN REGISTRATION ---
 
-                // Continue with other initializations that depend on username
-                connectToSignalingUseCase(currentUsername!!, "10.0.2.2", 50051) // currentUsername is now guaranteed non-null here
-                initializeWebRTCUseCase()
-                currentUsername = result.value
+
             }
             else {
                 _showToastEvent.emit("Подключение к серверу не удалось.")

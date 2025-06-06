@@ -6,10 +6,12 @@ import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import ru.drsn.waves.BuildConfig
 import gRPC.v1.Authentication.*
+import ru.drsn.waves.data.datasource.remote.grpc.AuthTokenInterceptor
 
 class AuthenticationClient (
     serverAddress: String,
-    serverPort: Int
+    serverPort: Int,
+    private val authTokenInterceptor: AuthTokenInterceptor
 ) {
     private val channel: ManagedChannel = ManagedChannelBuilder
         .forAddress(serverAddress, serverPort)
@@ -20,6 +22,7 @@ class AuthenticationClient (
                 useTransportSecurity()
             }
         }
+        .intercept(authTokenInterceptor)
         .build()
 
     private val stub = AuthorisationGrpcKt.AuthorisationCoroutineStub(channel)

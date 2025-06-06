@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import ru.drsn.waves.data.datasource.remote.grpc.AuthTokenInterceptor
 import ru.drsn.waves.domain.model.signaling.*
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
@@ -68,7 +69,7 @@ class SignalingRemoteDataSourceImpl @Inject constructor(
                 .keepAliveTime(KEEP_ALIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .keepAliveTimeout(KEEP_ALIVE_TIMEOUT_SECONDS * 2, TimeUnit.SECONDS)
                 .idleTimeout(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
-                .intercept(authTokenInterceptor) // <--- ПРИМЕНЯЕМ ИНТЕРЦЕПТОР ЗДЕСЬ
+                .intercept(authTokenInterceptor)
                 .build()
             managedChannel = newChannel
             // Инициализация gRPC стабов

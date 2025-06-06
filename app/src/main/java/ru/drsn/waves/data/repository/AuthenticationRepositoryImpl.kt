@@ -6,6 +6,7 @@ import ru.drsn.waves.data.datasource.remote.grpc.authentication.IAuthenticationR
 import ru.drsn.waves.domain.model.authentication.*
 import ru.drsn.waves.domain.model.utils.Result
 import ru.drsn.waves.domain.repository.IAuthenticationRepository
+import timber.log.Timber
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -100,8 +101,10 @@ class AuthenticationRepositoryImpl @Inject constructor(
         return try {
             val responseDto = remoteDataSource.updateFcmToken(fcmToken)
             if (responseDto.success) {
+                Timber.d("updated fcm token $fcmToken")
                 Result.Success(Unit)
             } else {
+                Timber.e("Error on fcmToken update ${responseDto.errorMessage}")
                 // Можно добавить специфическую ошибку для неудачного обновления токена
                 Result.Error(AuthError.FcmError(responseDto.errorMessage))
             }
